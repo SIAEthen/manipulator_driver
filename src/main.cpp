@@ -172,7 +172,7 @@ int main(int argc, char * argv[])
   armInterface.IPPosModeEnable();
   // std::cout << armPlanner.m_posCmd[0]<< armPlanner.m_posCmd[1]<< armPlanner.m_posCmd[2]<< 
   //         armPlanner.m_posCmd[3]<< armPlanner.m_posCmd[4]<< armPlanner.m_posCmd[5] << std::endl;
-  canReadWaitFlag = false;
+  canReadWaitFlag = false; //这个flag为true可以保证发消息有发有回，可以保证SDO配置参数都正常。但是在主循环中，不需要保证每发一个消息，就接收一个消息。接收消息是轮询机制。
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<ManipulatorDriver>());
   rclcpp::shutdown();
