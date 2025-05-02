@@ -4,12 +4,7 @@
 
 ## how to use?
 
- 
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import JointState
-
-#!/usr/bin/env python3
+```#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 # 1.导入消息类型JointState
@@ -44,6 +39,7 @@ class RobotVelocityCommand(Node):
         last_update_time = time.time()
         while rclpy.ok():
             msg = Float64MultiArray()
+            # 关节1-5速度为0,关节6的速度为0.5 rad/s
             msg.data = [0.0,0.0,0.0,0.0,0.0,0.5]
             # 发布关节数据
             self.jointVelocityCmdPublisher.publish(msg)
@@ -58,5 +54,5 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-	main()
+	main()```
 
