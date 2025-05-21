@@ -10,4 +10,13 @@
 #define CANChannel 0
 #define GripperTorque 300
 #define JointNum 6
+
+// 1 vel mode
+// 2 pos mode
+#define ManipulatorMode 2
+
+//define, pos_cmd = pos_cur + vel_cmd * dt
+// not define, pos_cmd = last_pos_cmd + + vel_cmd * dt
+// #define OnLinePlanning // 测试后，发现巨抖
+
 #endif

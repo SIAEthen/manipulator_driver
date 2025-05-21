@@ -48,13 +48,26 @@ class ManipulatorDriver : public rclcpp::Node
         auto qos_cmd = rclcpp::QoS(10).reliable().history(RMW_QOS_POLICY_HISTORY_KEEP_LAST);
         gripperCmdSub = this->create_subscription<std_msgs::msg::Bool>("/open_gripper_cmd",qos_cmd,
                                                                 std::bind(&ManipulatorDriver::gripperCmdCallback, this, std::placeholders::_1));
-        jointVelCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("/joint_vel_cmd",qos_cmd,
+        jointVelCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("/joint_vel_rads_cmd",qos_cmd,
                                                                 std::bind(&ManipulatorDriver::jointVelCmdCallback, this, std::placeholders::_1));
-        // 初始化关节速度，测试一下
-        // double velDes[6] = {0,0.1,0,0,0,0};
+        jointPosCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("/joint_pos_rad_cmd",qos_cmd,
+                                                                std::bind(&ManipulatorDriver::jointPosCmdCallback, this, std::placeholders::_1));
+        if(ManipulatorMode==1){
+            RCLCPP_INFO(this->get_logger(), "Manipulator Running at Velocity Mode! Try to send cmd to /joint_vel_cmd!");
+        }
+        if(ManipulatorMode==2){
+            RCLCPP_INFO(this->get_logger(), "Manipulator Running at Position Mode! Try to send cmd to /joint_pos_cmd!");
+        }
+        
+        // // 初始化关节速度，测试一下
+        // double velDes[6] = {0,0,0,0,0,0.5};
         // armPlanner.setDesiredVelocity(velDes);
-        // armInterface.IPOpenGripper();
-        // armInterface.IPCloseGripper();
+        // // armInterface.IPOpenGripper();
+        // // armInterface.IPCloseGripper();
+
+        // //测试一下posmode
+        // double qdes[6] = {0.5,0,0.5,0,0,0.5};
+        // armPlanner.setDesiredPosition(qdes);
     }
     ~ManipulatorDriver(){
       armInterface.IPPosModeDisable();
@@ -89,7 +102,7 @@ class ManipulatorDriver : public rclcpp::Node
         for(unsigned char i=0;i<JointNum;i++){
           joint_state_.position[i] = armInterface.m_jointposition[i];
           joint_state_.velocity[i] = armInterface.m_jointvelocity[i];
-          joint_state_.effort[i] = armInterface.m_jointcurrent[i];
+          joint_state_.effort[i] = armInterface.m_jointcurrent[i]*armInterface.m_driverGain[i]/1000.0;
         }
         // 发布消息
         publisher_->publish(joint_state_);
@@ -116,18 +129,32 @@ class ManipulatorDriver : public rclcpp::Node
           RCLCPP_INFO(this->get_logger(), "Close Gripper with current %d",GripperTorque);}
     }
     void jointVelCmdCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
-    { if(!velCmdPublishingFlag){
-          velCmdPublishingFlag = true; }//标志开始收到消息，CheckCmdTimeout开始运行
+      { if(!velCmdPublishingFlag){
+            velCmdPublishingFlag = true; }//标志开始收到消息，CheckCmdTimeout开始运行
+        double cmd[6] = {0};
+        for(unsigned char i=0;i<armInterface.m_jointnum;i++){
+            cmd[i] = msg->data.at(i);
+        }    
+        armPlanner.setDesiredVelocity(cmd);
+
+        auto system_clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
+        last_cmd_time_ = system_clock->now(); //记录当前的时间，可以用于检验。
+
+        RCLCPP_INFO(this->get_logger(), "joint Velocity Cmd cmd1 %f cmd2 %f cmd3 %f cmd4 %f cmd5 %f cmd6 %f",
+                                                                                cmd[0],cmd[1],cmd[2],
+                                                                                cmd[3],cmd[4],cmd[5]);}
+    void jointPosCmdCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
+    { 
       double cmd[6] = {0};
       for(unsigned char i=0;i<armInterface.m_jointnum;i++){
           cmd[i] = msg->data.at(i);
       }    
-      armPlanner.setDesiredVelocity(cmd);
+      armPlanner.setDesiredPosition(cmd);
 
       auto system_clock = std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME);
       last_cmd_time_ = system_clock->now(); //记录当前的时间，可以用于检验。
 
-      RCLCPP_INFO(this->get_logger(), "joint Velocity Cmd cmd1 %f cmd2 %f cmd3 %f cmd4 %f cmd5 %f cmd6 %f",
+      RCLCPP_INFO(this->get_logger(), "joint Position Cmd cmd1 %f cmd2 %f cmd3 %f cmd4 %f cmd5 %f cmd6 %f",
                                                                               cmd[0],cmd[1],cmd[2],
                                                                               cmd[3],cmd[4],cmd[5]);}
     void checkCmdTimeout(double timeout){
@@ -150,7 +177,9 @@ class ManipulatorDriver : public rclcpp::Node
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_;
 
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr jointVelCmdSub;
+    rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr jointPosCmdSub;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr gripperCmdSub;
+    
 
     rclcpp::Time last_cmd_time_; //for joint
     bool velCmdPublishingFlag = false; //当接收vel消息时，由ros接收消息回调函数将该cmdflag为true，并开始循环检查接收消息是否超时。
@@ -163,10 +192,18 @@ int main(int argc, char * argv[])
   candriver.initialize();
   //初始化机械臂内所有驱动器，1-6初始化为IP POS模式，7初始化为力矩模式
   armInterface.IPPosModeInit();
-
-  //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
-  //初始化模式标志位，初始化指令，让指令与当前位置相同
-  armPlanner.AutoVelModeInit();
+  switch(ManipulatorMode){
+    case 1:
+      //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
+      //初始化模式标志位，初始化指令，让指令与当前位置相同
+      armPlanner.AutoVelModeInit();
+      break;
+    case 2:
+      armPlanner.AutoPosModeInit();
+      break;
+    default:
+      break;
+  }
 
   //机械臂1-6关节使能
   armInterface.IPPosModeEnable();

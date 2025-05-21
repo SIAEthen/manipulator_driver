@@ -82,3 +82,17 @@ if __name__ == "__main__":
 	main()
 ```
 
+
+# working mode 20250521增加内容
+## build the driver with pos mode or vel mode
+In defines.h, 标志位ManipulatorMode控制机械臂运行在哪种模式，为1是速度模式，为2是位置模式。
+程序ros2驱动留有两个话题，/joint_vel_rads_cmd与/joint_pos_rad_cmd，其格式一致，往相应模式对应的话题发布指令即可控制机械臂运动
+
+## 控制例程
+robot_kinematic_control, ibvs.py有两种模式的控制程序框架
+
+## 位置控制源码介绍
+位置控制的源码在kinematicscontroller.cpp和相应的头文件中，在里面实现了一个类PosKinController
+该类最重要的一个方法是通过当前期望位置、当前位置以及Kp参数获得速度，并固定了加速度以保证速度指令平滑，之后将平滑后的速度，以及上一时刻的命令积分，获得实际位置指令。
+
+该重要方法有一个后续可以思考的点，出了bug可以修改。 是否可以直接用上一时刻命令代替当前位置，与期望位置用Kp生成速度呢？

@@ -29,6 +29,7 @@ src/main.cpp
 src/canDriver.cpp  
 src/ManipulatorInterface.cpp 
 src/ManipulatorPlanner.cpp
+src/kinematicsController.cpp
 #canopen related file
 canopenAPP/GlobalVariables.cpp
 canopenAPP/ProfPosition.cpp

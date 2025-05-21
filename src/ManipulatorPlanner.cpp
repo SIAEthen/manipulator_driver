@@ -38,13 +38,23 @@ void ManipulatorPlanner::AutoVelModeRun(){
     _manipulator.sendPosCmd(m_posCmd); 
     return;
 } 
-void ManipulatorPlanner::AutoPosVelModeInit(){
+
+void ManipulatorPlanner::AutoPosModeInit(){
     m_Mode = ManipulatorMode_AutoPos;
+    double kp[6] = {1,1,1,1,1,1};
+    m_posController = new PosKinController(kp,m_acc,_manipulator.m_jointposition,_manipulator.m_controlfrequency,m_maxVelocity,
+                                            _manipulator.m_jointUpperLimits,_manipulator.m_jointLowerLimits);
+    for(unsigned char i=0;i<JointNum;i++){
+        m_posCmd[i] = _manipulator.m_jointposition[i];
+        m_posModePositionDes[i] = _manipulator.m_jointposition[i];
+    }
 } 
 void ManipulatorPlanner::AutoPosModeRun(){
-    
+    m_posController->updateJointPositionCmd(m_posModePositionDes,_manipulator.m_jointposition,m_posCmd);
+    _manipulator.sendPosCmd(m_posCmd); 
     return;
 } 
+
 void ManipulatorPlanner::P2PModeInit(){
     m_Mode = ManipulatorMode_P2P;
 } 
@@ -87,9 +97,18 @@ void ManipulatorPlanner::setDesiredVelocity(double* dq){
         }
     }
 }
+
+void ManipulatorPlanner::setDesiredPosition(double* q){
+
+    //对速度进行限制
+    for(unsigned char i=0;i<JointNum;i++){
+        m_posModePositionDes[i] = q[i];
+    }
+}
+
 //根据期望速度与当前命令的速度，结合设定的加速度值，给出当前指令应该有的速度
 void ManipulatorPlanner::getCmdVelocity(){
-     //对速度进行限制
+    //对速度进行限制
     for(unsigned char i=0;i<_manipulator.m_jointnum;i++){
         double delta_vel = m_velDes[i] - m_velCmd[i];
         double cmd = 0;
