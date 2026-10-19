@@ -19,11 +19,12 @@ using namespace std::chrono_literals;
 
 /* This example creates a subclass of Node and uses std::bind() to register a
 * member function as a callback from the timer. */
-canDriver candriver(0,500);
+
 int32_t jointoffset[6] = {32000, 13930,13156,31861,31692,32000+29038-65536};
 uint8_t joint_num = JointNum;
 uint8_t control_frequency = 125;
 //ManipulatorInterface(int32_t *joint_offset,uint8_t joint_num, uint8_t control_frequency, canDriver &driver);
+canDriver candriver(0,500);
 ManipulatorInterface armInterface(jointoffset,joint_num,control_frequency,candriver);
 ManipulatorPlanner armPlanner(armInterface);
 
@@ -32,49 +33,119 @@ class ManipulatorDriver : public rclcpp::Node
   public:
     ManipulatorDriver()
     : Node("manipulator_driver")
-    {
-        // 创建QoS配置 (工业级可靠传输)
-        // 或使用链式配置（推荐）
-        auto qos = rclcpp::QoS(10) // 保持最后10条
-          .history(RMW_QOS_POLICY_HISTORY_KEEP_LAST)
-          .reliability(RMW_QOS_POLICY_RELIABILITY_SYSTEM_DEFAULT); // 1秒截止时间  
+  {     
+    RCLCPP_INFO(this->get_logger(), "ROS MAIN: Try to get parameters from ROS server, parameters are can_id_ and can_baud_rate_");
+    this->declare_parameter<std::int64_t>("can_id_",0);
+    this->get_parameter("can_id_", can_id_);  
+    this->declare_parameter<std::int64_t>("can_baud_rate_",500);
+    this->get_parameter("can_baud_rate_", can_baud_rate_); 
+    
+    this->declare_parameter<float>("fauvms_joint1_offset_",0.0f);
+    this->declare_parameter<float>("fauvms_joint2_offset_",0.0f);
+    this->declare_parameter<float>("fauvms_joint3_offset_",0.0f);
+    this->declare_parameter<float>("fauvms_joint4_offset_",0.0f);
+    this->declare_parameter<float>("fauvms_joint5_offset_",0.0f);
+    this->declare_parameter<float>("fauvms_joint6_offset_",0.0f);
 
-        publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states",qos);
-        timerControlLoop = this->create_wall_timer(8ms, std::bind(&ManipulatorDriver::ControlLoopCallback, this));
-        timerHandleCanLoop = this->create_wall_timer(1ms, std::bind(&ManipulatorDriver::HandleCanLoopCallback, this));
-        timerHandleROS2Loop = this->create_wall_timer(20ms, std::bind(&ManipulatorDriver::HandleROS2Loop, this));
-        timerHandleDebugLoop = this->create_wall_timer(2000ms, std::bind(&ManipulatorDriver::HandleDebugLoop, this));
-        
-        auto qos_cmd = rclcpp::QoS(10).reliable().history(RMW_QOS_POLICY_HISTORY_KEEP_LAST);
-        gripperCmdSub = this->create_subscription<std_msgs::msg::Bool>("/open_gripper_cmd",qos_cmd,
-                                                                std::bind(&ManipulatorDriver::gripperCmdCallback, this, std::placeholders::_1));
-        jointVelCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("/joint_vel_rads_cmd",qos_cmd,
-                                                                std::bind(&ManipulatorDriver::jointVelCmdCallback, this, std::placeholders::_1));
-        jointPosCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("/joint_pos_rad_cmd",qos_cmd,
-                                                                std::bind(&ManipulatorDriver::jointPosCmdCallback, this, std::placeholders::_1));
-        if(ManipulatorMode==1){
-            RCLCPP_INFO(this->get_logger(), "Manipulator Running at Velocity Mode! Try to send cmd to /joint_vel_cmd!");
-        }
-        if(ManipulatorMode==2){
-            RCLCPP_INFO(this->get_logger(), "Manipulator Running at Position Mode! Try to send cmd to /joint_pos_cmd!");
-        }
-        
-        // // 初始化关节速度，测试一下
-        // double velDes[6] = {0,0,0,0,0,0.5};
-        // armPlanner.setDesiredVelocity(velDes);
-        // // armInterface.IPOpenGripper();
-        // // armInterface.IPCloseGripper();
+    this->get_parameter("fauvms_joint1_offset_", fauvms_joint_offset_[0]);
+    this->get_parameter("fauvms_joint2_offset_", fauvms_joint_offset_[1]);    
+    this->get_parameter("fauvms_joint3_offset_", fauvms_joint_offset_[2]);     
+    this->get_parameter("fauvms_joint4_offset_", fauvms_joint_offset_[3]); 
+    this->get_parameter("fauvms_joint5_offset_", fauvms_joint_offset_[4]); 
+    this->get_parameter("fauvms_joint6_offset_", fauvms_joint_offset_[5]);
 
-        // //测试一下posmode
-        // double qdes[6] = {0.5,0,0.5,0,0,0.5};
-        // armPlanner.setDesiredPosition(qdes);
+    this->declare_parameter<float>("fauvms_joint1_direction_",1.0f);
+    this->declare_parameter<float>("fauvms_joint2_direction_",1.0f);
+    this->declare_parameter<float>("fauvms_joint3_direction_",1.0f);
+    this->declare_parameter<float>("fauvms_joint4_direction_",1.0f);
+    this->declare_parameter<float>("fauvms_joint5_direction_",1.0f);
+    this->declare_parameter<float>("fauvms_joint6_direction_",1.0f);
+
+    this->get_parameter("fauvms_joint1_direction_", fauvms_joint_direction_[0]);
+    this->get_parameter("fauvms_joint2_direction_", fauvms_joint_direction_[1]);
+    this->get_parameter("fauvms_joint3_direction_", fauvms_joint_direction_[2]);
+    this->get_parameter("fauvms_joint4_direction_", fauvms_joint_direction_[3]);
+    this->get_parameter("fauvms_joint5_direction_", fauvms_joint_direction_[4]);
+    this->get_parameter("fauvms_joint6_direction_", fauvms_joint_direction_[5]);
+
+    //机械臂的方向、初始位置为小手固定基座下的状态，但是这里需要小手与飞行臂对其，所以还需要在加一组6个ros parameters 
+    RCLCPP_INFO(this->get_logger(), "ROS MAIN: Get params successfully! can_id_ (%d), can_baud_rate_ (%d)",can_id_,can_baud_rate_);
+    
+    RCLCPP_INFO(this->get_logger(), "ROS MAIN: Try to Initialize Manipulator");
+    InitManipulator();
+    RCLCPP_INFO(this->get_logger(), "ROS MAIN: Initialize Success!");
+
+    // 创建QoS配置 (工业级可靠传输)
+    // 或使用链式配置（推荐）
+    auto qos = rclcpp::QoS(10) // 保持最后10条
+      .history(RMW_QOS_POLICY_HISTORY_KEEP_LAST)
+      .reliability(RMW_QOS_POLICY_RELIABILITY_SYSTEM_DEFAULT); // 1秒截止时间  
+
+    publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("joint_states",qos);
+    timerControlLoop = this->create_wall_timer(8ms, std::bind(&ManipulatorDriver::ControlLoopCallback, this));
+    timerHandleCanLoop = this->create_wall_timer(1ms, std::bind(&ManipulatorDriver::HandleCanLoopCallback, this));
+    timerHandleROS2Loop = this->create_wall_timer(20ms, std::bind(&ManipulatorDriver::HandleROS2Loop, this));
+    timerHandleDebugLoop = this->create_wall_timer(10000ms, std::bind(&ManipulatorDriver::HandleDebugLoop, this));
+    
+    auto qos_cmd = rclcpp::QoS(10).reliable().history(RMW_QOS_POLICY_HISTORY_KEEP_LAST);
+    gripperCmdSub = this->create_subscription<std_msgs::msg::Bool>("open_gripper_cmd",qos_cmd,
+                                                            std::bind(&ManipulatorDriver::gripperCmdCallback, this, std::placeholders::_1));
+    jointVelCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("joint_vel_rads_cmd",qos_cmd,
+                                                            std::bind(&ManipulatorDriver::jointVelCmdCallback, this, std::placeholders::_1));
+    jointPosCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("joint_pos_rad_cmd",qos_cmd,
+                                                            std::bind(&ManipulatorDriver::jointPosCmdCallback, this, std::placeholders::_1));
+    if(ManipulatorMode==1){
+        RCLCPP_INFO(this->get_logger(), "ROS MAIN: Manipulator Running at Velocity Mode! Try to send cmd to /joint_vel_cmd!");
     }
-    ~ManipulatorDriver(){
-      armInterface.IPPosModeDisable();
-      candriver.deinitialize();
+    if(ManipulatorMode==2){
+        RCLCPP_INFO(this->get_logger(), "ROS MAIN: Manipulator Running at Position Mode! Try to send cmd to /joint_pos_cmd!");
     }
+    RCLCPP_INFO(this->get_logger(), "ROS MAIN: Manipulator driver init success! Running at different hz");
+    // // 初始化关节速度，测试一下
+    // double velDes[6] = {0,0,0,0,0,0.5};
+    // armPlanner.setDesiredVelocity(velDes);
+    // // armInterface.IPOpenGripper();
+    // // armInterface.IPCloseGripper();
+
+    // //测试一下posmode
+    // double qdes[6] = {0.5,0,0.5,0,0,0.5};
+    // armPlanner.setDesiredPosition(qdes);
+    canReadWaitFlag = false; //这个flag为true可以保证发消息有发有回，可以保证SDO配置参数都正常。但是在主循环中，不需要保证每发一个消息，就接收一个消息。接收消息是轮询机制。
+  }
+  ~ManipulatorDriver(){
+    armInterface.IPPosModeDisable();
+    candriver.deinitialize();
+  }
 
   private:
+    void InitManipulator(){
+      //初始化candriver
+      candriver.setParam(can_id_,can_baud_rate_);
+      candriver.initialize();
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Can driver init success");
+      //初始化机械臂内所有驱动器，1-6初始化为IP POS模式，7初始化为力矩模式
+      armInterface.IPPosModeInit();
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 IP POS Mode, Joint 7 Torque Mode");
+      switch(ManipulatorMode){
+      case 1:
+        //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
+        //初始化模式标志位，初始化指令，让指令与当前位置相同
+        armPlanner.AutoVelModeInit();
+        RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in Vel Mode");
+        break;
+      case 2:
+        armPlanner.AutoPosModeInit();
+        RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in Pos Mode");
+        break;
+      default:
+        break;
+      }
+      //机械臂1-6关节使能
+      armInterface.IPPosModeEnable();
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 enabled");
+      // std::cout << armPlanner.m_posCmd[0]<< armPlanner.m_posCmd[1]<< armPlanner.m_posCmd[2]<< 
+      // armPlanner.m_posCmd[3]<< armPlanner.m_posCmd[4]<< armPlanner.m_posCmd[5] << std::endl;
+    }
     void ControlLoopCallback(){
       armInterface.updateState();
       armPlanner.run();
@@ -100,9 +171,10 @@ class ManipulatorDriver : public rclcpp::Node
         joint_state_.velocity.resize(JointNum+2, 0.0);
         joint_state_.effort.resize(JointNum+2, 0.0);
         for(unsigned char i=0;i<JointNum;i++){
-          joint_state_.position[i] = armInterface.m_jointposition[i];
-          joint_state_.velocity[i] = armInterface.m_jointvelocity[i];
-          joint_state_.effort[i] = armInterface.m_jointcurrent[i]*armInterface.m_driverGain[i]/1000.0;
+        //这里加上了飞行比的offset，对于3关节而言，飞行比0位为DH参数0位系下的3.14，jointoffset就设置为3.14，飞行臂3关节在0位，对于机械臂DH参数坐标系而言现在在3.14
+          joint_state_.position[i] = fauvms_joint_direction_[i]*(armInterface.m_jointposition[i] - fauvms_joint_offset_[i]);
+          joint_state_.velocity[i] = fauvms_joint_direction_[i]*armInterface.m_jointvelocity[i];
+          joint_state_.effort[i] = fauvms_joint_direction_[i]*armInterface.m_jointcurrent[i]*armInterface.m_driverGain[i]/1000.0;
         }
         // 发布消息
         publisher_->publish(joint_state_);
@@ -147,7 +219,7 @@ class ManipulatorDriver : public rclcpp::Node
     { 
       double cmd[6] = {0};
       for(unsigned char i=0;i<armInterface.m_jointnum;i++){
-          cmd[i] = msg->data.at(i);
+          cmd[i] = fauvms_joint_direction_[i]*msg->data.at(i) + fauvms_joint_offset_[i]; //这里加上了飞行比的offset，对于二关节而言，飞行比0位为DH参数0位系下的1.57，jointoffset就设置为1.57，飞行臂动到0位，对于机械臂而言指令就是动到1.57
       }    
       armPlanner.setDesiredPosition(cmd);
 
@@ -184,32 +256,15 @@ class ManipulatorDriver : public rclcpp::Node
     rclcpp::Time last_cmd_time_; //for joint
     bool velCmdPublishingFlag = false; //当接收vel消息时，由ros接收消息回调函数将该cmdflag为true，并开始循环检查接收消息是否超时。
                                           //当消息cmd超时后，ROS——WARN报一次警告，将该flag为false，并且不再循环检查
+    int can_id_;
+    int can_baud_rate_;
+    float fauvms_joint_offset_[6] = {0};
+    float fauvms_joint_direction_[6] = {1.0f,1.0f,1.0f,1.0f,1.0f,1.0f};
 };
 
 int main(int argc, char * argv[])
 {
-  //初始化candriver
-  candriver.initialize();
-  //初始化机械臂内所有驱动器，1-6初始化为IP POS模式，7初始化为力矩模式
-  armInterface.IPPosModeInit();
-  switch(ManipulatorMode){
-    case 1:
-      //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
-      //初始化模式标志位，初始化指令，让指令与当前位置相同
-      armPlanner.AutoVelModeInit();
-      break;
-    case 2:
-      armPlanner.AutoPosModeInit();
-      break;
-    default:
-      break;
-  }
-
-  //机械臂1-6关节使能
-  armInterface.IPPosModeEnable();
-  // std::cout << armPlanner.m_posCmd[0]<< armPlanner.m_posCmd[1]<< armPlanner.m_posCmd[2]<< 
-  //         armPlanner.m_posCmd[3]<< armPlanner.m_posCmd[4]<< armPlanner.m_posCmd[5] << std::endl;
-  canReadWaitFlag = false; //这个flag为true可以保证发消息有发有回，可以保证SDO配置参数都正常。但是在主循环中，不需要保证每发一个消息，就接收一个消息。接收消息是轮询机制。
+  
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<ManipulatorDriver>());
   rclcpp::shutdown();

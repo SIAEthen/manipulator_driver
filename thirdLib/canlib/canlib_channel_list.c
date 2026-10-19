@@ -75,12 +75,15 @@
 
 // This has to be modified if we add/remove drivers.
 static const char *driver_name[] = {
-    "lapcan", "pcican", "pcicanII", "usbcanII", "leaf", "mhydra", "pciefd", "kvvirtualcan"
+    "pcican", "pcicanII", "usbcanII", "leaf", "mhydra", "pciefd", "kvvirtualcan"
 }; // Virtual channels should always be last
 
 static const char *off_name[] = {
-    "LAPcan", "PCIcan", "PCIcanII", "USBcanII", "Leaf", "Minihydra", "PCIe CAN", "VIRTUALcan"
+    "PCIcan", "PCIcanII", "USBcanII", "Leaf", "Minihydra", "PCIe CAN", "VIRTUALcan"
 }; // Virtual channels should always be last
+
+// Since we keep track of device minor in unsigned long long this is the max number of minors
+#define MAX_NUMBER_OF_MINORS ( sizeof(unsigned long long) * 8)
 
 int cmpfunc_ean(const void *a, const void *b)
 {
@@ -125,7 +128,7 @@ canStatus ccl_get_channel_list(ccl_class *self)
     for (driver_index = 0; driver_index < sizeof(driver_name) / sizeof(*driver_name);
          driver_index++) {
         uint32_t number_on_driver = 0;
-        for (minor_index = 0; minor_index < 128; minor_index++) {
+        for (minor_index = 0; minor_index < MAX_NUMBER_OF_MINORS; minor_index++) {
             uint32_t skip = 0;
             int fd;
             char file_name[64];

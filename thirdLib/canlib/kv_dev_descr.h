@@ -227,5 +227,7 @@ static struct dev_descr dev_descr_list[] = {
     { "Kvaser Mini PCI Express 2xCAN v3", { 0x30014176, 0x00073301 } },
     { "Kvaser Mini PCI Express 1xCAN v3", { 0x30014206, 0x00073301 } },
     { "Kvaser PCIe 8xCAN", { 0x30015128, 0x00073301 } },
+    { "Kvaser Edge", { 0x30983977, 0x00073301 } },
+    { "Kvaser Edge 4xCAN", { 0x30016880, 0x00073301 } },
 };
 #endif /* __KV_DEV_DESCR_H_ */

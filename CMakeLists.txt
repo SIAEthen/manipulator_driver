@@ -51,7 +51,11 @@ ament_target_dependencies(driver rclcpp std_msgs sensor_msgs)
 install(TARGETS  driver
   DESTINATION lib/${PROJECT_NAME}
   )
-
+  
+install(
+  DIRECTORY launch 
+  DESTINATION share/${PROJECT_NAME}
+)
 
 
 

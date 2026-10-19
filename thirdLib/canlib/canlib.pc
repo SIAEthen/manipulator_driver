@@ -5,7 +5,7 @@ includedir=/usr/include
 
 Name: canlib
 Description: Kvaser Gnu/Linux canlib
-Version: 1.10.9
+Version: 1.10.10
 
 Requires: 
 Libs: -L${libdir} -lcanlib

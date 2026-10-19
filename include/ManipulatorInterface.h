@@ -48,9 +48,13 @@ class ManipulatorInterface
 
     private:
         
-        double m_jointUpperLimits[6] = {DEG2RAD(90),DEG2RAD(170),DEG2RAD(120),DEG2RAD(50),DEG2RAD(90),DEG2RAD(180)};
+        // double m_jointUpperLimits[6] = {DEG2RAD(90),DEG2RAD(170),DEG2RAD(120),DEG2RAD(50),DEG2RAD(90),DEG2RAD(180)};
+        // // -0.5是2关节的机械极限， -0.126是3关节的机械极限
+        // double m_jointLowerLimits[6] = {DEG2RAD(-90),-0.5, -0.126, DEG2RAD(-50),DEG2RAD(-90),DEG2RAD(-180)};
+        
+        double m_jointUpperLimits[6] = {DEG2RAD(180),DEG2RAD(180),DEG2RAD(180),DEG2RAD(180),DEG2RAD(180),DEG2RAD(180)};
         // -0.5是2关节的机械极限， -0.126是3关节的机械极限
-        double m_jointLowerLimits[6] = {DEG2RAD(-90),-0.5, -0.126, DEG2RAD(-50),DEG2RAD(-90),DEG2RAD(-180)};
+        double m_jointLowerLimits[6] = {DEG2RAD(-180),DEG2RAD(-180), DEG2RAD(-180), DEG2RAD(-180),DEG2RAD(-180),DEG2RAD(-180)};
         
         double m_jointposition[6];   // rad
         double m_jointvelocity[6];   // rad/s

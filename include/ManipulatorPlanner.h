@@ -38,8 +38,8 @@ class ManipulatorPlanner
         ManipulatorInterface& _manipulator;
         ManipulatorModeTypeDef m_Mode;
         PosKinController *m_posController;
-        double m_maxVelocity[6] = {0.3,0.3,0.5, 0.5,0.5,0.5};
-        double m_acc[6] = {0.5,0.5,0.5, 1,1,1};
+        double m_maxVelocity[6] = {MaxVel1,MaxVel2,MaxVel3,MaxVel4,MaxVel5,MaxVel6};
+        double m_acc[6] = {KinAcc1,KinAcc2,KinAcc3,KinAcc4,KinAcc5,KinAcc6};
     
     
     private:

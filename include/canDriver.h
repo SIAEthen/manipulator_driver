@@ -22,6 +22,7 @@ class canDriver
 public:
     canDriver(int canID,int baudrate);
     ~canDriver();
+    void setParam(int canID,int baudrate);
     int canDriverRead(long *cobid, u_char *rxdata, uint *dlc, uint *flags);
     // time_wait
     // [in]	hnd	A handle to an open circuit.

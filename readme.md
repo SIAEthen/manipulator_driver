@@ -96,3 +96,19 @@ robot_kinematic_control, ibvs.py有两种模式的控制程序框架
 该类最重要的一个方法是通过当前期望位置、当前位置以及Kp参数获得速度，并固定了加速度以保证速度指令平滑，之后将平滑后的速度，以及上一时刻的命令积分，获得实际位置指令。
 
 该重要方法有一个后续可以思考的点，出了bug可以修改。 是否可以直接用上一时刻命令代替当前位置，与期望位置用Kp生成速度呢？
+
+
+# usage
+
+` ros2 run manipulator_driver driver `
+` ros2 launch seven_function_arm_urdf view2_robot_launch.py `
+In VSCode, run ibvs.py
+
+
+# debug
+
+# 通过ns控制节点所有topic的名称
+首先在指定话题名称时前面不要加斜线
+避免在节点代码中使用全局名称（如/topic）。
+优先用​​相对名称​​（如topic），使其自动继承namespace。
+在launch文件中利用namespace配置

@@ -449,7 +449,7 @@ int IP_Mode_Init_Pos(canDriver *driver)
         //6) 设置周期 1.2.3....10ms
         if (1 != IP_Set_Period(driver, ManipulatorState.NodeID[i], 8, IP_TIME_INDEX_10_3))	return 0;
         //7) 设置最后一个IP记录后 电机停止运动前 外推计算几个周期点
-        if (1 != IP_Set_Extrapolation_Cycle_Timeout(driver, ManipulatorState.NodeID[i], 2))	return 0;
+        if (1 != IP_Set_Extrapolation_Cycle_Timeout(driver, ManipulatorState.NodeID[i], 10))	return 0;
         /*----Note: 单个节点首发一次共计 16 条数据帧 */
         usleep(2000);
     }

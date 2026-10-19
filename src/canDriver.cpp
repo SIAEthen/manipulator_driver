@@ -10,6 +10,11 @@ canDriver::~canDriver()
 {
     deinitialize();
 }
+void canDriver::setParam(int canID,int baudrate)
+{
+    m_canID = canID;
+    m_baudrate = baudrate;
+}
 int canDriver::initialize()
 {
     // The CANlib library is initialized by a call to canInitializeLibrary().
@@ -18,6 +23,7 @@ int canDriver::initialize()
     // channel on the CAN interface. canOPEN_EXCLUSIVE means we don't want to share this channel with
     // any other currently executing program.
     hnd = canOpenChannel(m_canID, canOPEN_EXCLUSIVE);
+    fprintf(stderr,"Try open canChannel (%d) with baudrate (%d)\n", m_canID,m_baudrate);
     if (hnd < 0) {
         char msg[64];
         canGetErrorText((canStatus)hnd, msg, sizeof(msg));
