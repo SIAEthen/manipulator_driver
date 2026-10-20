@@ -16,8 +16,6 @@ extern uint64_t RxResult;
 
 extern TPDODatasTypeDef tpdo1DataStruct;
 extern TPDODatasTypeDef tpdo2DataStruct;
-extern canEmergencyTypeDef canEmergencyDataStruct;
-
 
 extern ManipulatorStateTypeDef ManipulatorState;
 extern IPFlagValueTypeDef 		ipModeFlags;

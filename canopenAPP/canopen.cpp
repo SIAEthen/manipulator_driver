@@ -36,12 +36,29 @@ int CANOPEN_Receieve_Msg(canDriver *driver)
 		uint32_t COBID_fc 				= 	canRxHeader.StdId & FC_MASK;
 		canRxDataStruct.m_NodeID 		= (canRxHeader.StdId & ID_MASK);
 		canRxDataStruct.m_DLC	  		= canRxHeader.DLC;
+		if (canRxHeader.DLC > sizeof(canRxDataStruct.m_CanRxData)) return 0;
 		memcpy(canRxDataStruct.m_CanRxData, canRxData, canRxHeader.DLC);
 
 
-		if (COBID_fc == FC_EMERGENCY)
-			canRxDataTypeFlag.m_EMYC_flag = 1;	// 收到紧急消息报文 更改数据就绪标志位
-			memcpy(&canEmergencyDataStruct, canRxData,canRxHeader.DLC);
+		if (COBID_fc == FC_EMERGENCY && canRxHeader.DLC == 8) {
+			canRxDataTypeFlag.m_EMYC_flag = 1;
+
+			for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i) {
+				if (ManipulatorState.NodeID[i] != canRxDataStruct.m_NodeID)
+					continue;
+				// 引用的话简单一点，这里显示解析防止越界
+				auto &emergency = ManipulatorState.Emergency[i];
+				emergency.errorCode =
+					uint16_t(canRxData[0]) | (uint16_t(canRxData[1]) << 8);
+				emergency.errorRegister = canRxData[2];
+				emergency.elmoErrorCode = canRxData[3];
+				emergency.errorCodeDataField1 =
+					uint16_t(canRxData[4]) | (uint16_t(canRxData[5]) << 8);
+				emergency.errorCodeDataField2 =
+					uint16_t(canRxData[6]) | (uint16_t(canRxData[7]) << 8);
+				break;
+			}
+		}
 
 		if (COBID_fc == FC_TSDO)
 			canRxDataTypeFlag.m_TSDO_flag = 1;	// 收到从机的SDO响应 更改数据就绪标志位
@@ -78,18 +95,17 @@ int CAN_Rx_Data_Handle(canDriver *driver, uint16_t NodeID)
 		return 0;
 	 }
 
-	canRxWaitTime = 2;	// 超时等待，添加到 stm32f4xxx_it.c 中 递减计时 ms 单位
-
-	while ((!canRxDataTypeFlag.m_TSDO_flag &&
+	if ((   !canRxDataTypeFlag.m_TSDO_flag &&
 			!canRxDataTypeFlag.m_NODE_GUARD_flag &&
 			!canRxDataTypeFlag.m_EMYC_flag &&
 			!canRxDataTypeFlag.m_TPDO1_flag &&
 			!canRxDataTypeFlag.m_TPDO2_flag &&
 			!canRxDataTypeFlag.m_TPDO3_flag &&
-			!canRxDataTypeFlag.m_TPDO4_flag   ) && canRxWaitTime);	// 判断接收是什么类型数据，同时添加超时等待
-	if (canRxWaitTime > 0 && canRxDataStruct.m_NodeID == NodeID)
+			!canRxDataTypeFlag.m_TPDO4_flag   ) ) {
+				return 0;
+			}	//不认识的数据不处理
+	if (canRxDataStruct.m_NodeID == NodeID)
 	{
-		canRxWaitTime = 0;
 		RxResult = 0;
 		if (1 == canRxDataTypeFlag.m_TSDO_flag)
 		{	// 快速SDO 收到从机响应标志

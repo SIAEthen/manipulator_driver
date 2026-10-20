@@ -13,9 +13,9 @@ uint64_t RxResult;
 TPDODatasTypeDef tpdo1DataStruct = {0};
 TPDODatasTypeDef tpdo2DataStruct = {0};
 
-canEmergencyTypeDef canEmergencyDataStruct = {0};
 
-ManipulatorStateTypeDef ManipulatorState={{0},{0},{0},{0},{1,2,3,4,5,6,7},6,7};
+
+ManipulatorStateTypeDef ManipulatorState={{0},{0},{0},{0},{0},{1,2,3,4,5,6,7},6,7};
 
 // IP模式相关的标志位声明与定义
 IPFlagValueTypeDef 		ipModeFlags = IP_Flag_Clc;

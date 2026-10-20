@@ -18,6 +18,16 @@
 #include "sync.h"
 #include "nmt.h"
 
+/* 存储can节点的 Emergency Code */
+typedef struct {
+	uint16_t errorCode;
+	uint8_t	errorRegister;
+	uint8_t elmoErrorCode;
+	uint16_t errorCodeDataField1;
+	uint16_t errorCodeDataField2;
+}canEmergencyTypeDef;
+
+
 typedef struct 
 {
     /* data */
@@ -25,6 +35,7 @@ typedef struct
     int32_t     ActualVelocity[7];
     int16_t     ActualCurrent[7];
     uint16_t    ActualStatus[7];
+	canEmergencyTypeDef Emergency[7];
     uint8_t     NodeID[7];
     uint8_t     NumOfJoint;
     uint8_t     NumOfMotor;
@@ -85,14 +96,7 @@ typedef struct {
 	uint8_t nodeNum;
 }NodeStatusTypeDef;
 
-/* 存储can节点的 Emergency Code */
-typedef struct {
-	uint16_t errorCode;
-	uint8_t	errorRegister;
-	uint8_t elmoErrorCode;
-	uint16_t errorCodeDataField1;
-	uint16_t errorCodeDataField2;
-}canEmergencyTypeDef;
+
 
 /* Control Word set value */
 typedef enum {
