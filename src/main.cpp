@@ -200,6 +200,7 @@ class ManipulatorDriver : public rclcpp::Node
           armInterface.IPCloseGripper();
           RCLCPP_INFO(this->get_logger(), "Close Gripper with current %d",GripperTorque);}
     }
+    
     void jointVelCmdCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
       { if(!velCmdPublishingFlag){
             velCmdPublishingFlag = true; }//标志开始收到消息，CheckCmdTimeout开始运行

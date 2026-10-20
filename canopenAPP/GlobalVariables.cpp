@@ -1,5 +1,5 @@
 #include "GlobalVariables.h"
-canDriver kavaser(0,500);
+// canDriver kavaser(0,500); // 这是为了qt连接做的can 2026-10-20 xinhui
 
 CAN_RxHeaderTypeDef	canRxHeader;
 uint8_t				canRxData[8];

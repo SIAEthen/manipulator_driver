@@ -4,7 +4,7 @@
 #include "canopen.h"
 #include "InterPosition.h"
 
-extern canDriver kavaser;
+// extern canDriver kavaser; // 这是为了qt连接做的can 2026-10-20 xinhui
 /* 外部定义 */
 extern CAN_RxHeaderTypeDef	canRxHeader;
 extern uint8_t				canRxData[8];
