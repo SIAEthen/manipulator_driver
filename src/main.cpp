@@ -113,9 +113,12 @@ class ManipulatorDriver : public rclcpp::Node
 
     
     void HandleDebugLoop(){
-      RCLCPP_INFO(this->get_logger(), "Debug cmd1 %f cmd2 %f cmd3 %f cmd4 %f cmd5 %f cmd6 %f",
-        armPlanner.m_posCmd[0],armPlanner.m_posCmd[1],armPlanner.m_posCmd[2],
-        armPlanner.m_posCmd[3],armPlanner.m_posCmd[4],armPlanner.m_posCmd[5]);
+      if(DebugMode){
+          RCLCPP_INFO(this->get_logger(), "Debug cmd1 %f cmd2 %f cmd3 %f cmd4 %f cmd5 %f cmd6 %f",
+          armPlanner.m_posCmd[0],armPlanner.m_posCmd[1],armPlanner.m_posCmd[2],
+          armPlanner.m_posCmd[3],armPlanner.m_posCmd[4],armPlanner.m_posCmd[5]);
+      }
+      
       return;
     }
     
