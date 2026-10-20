@@ -676,7 +676,7 @@ int IP_Mode_Disable(canDriver *driver)
         usleep(2000);
     }
 
-    for (uint8_t idx = 0; idx < ManipulatorState.NumOfMotor; ++idx) {
+    for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
         IP_CW_Switch_On_Disable(driver, ManipulatorState.NodeID[idx]); // 驱动器转化为switch on disable，所有驱动器都一样
 		usleep(2000);
 	}
@@ -689,11 +689,11 @@ int IP_Mode_Disable(canDriver *driver)
     CAN_NMT_Switch_State(driver, 00, NMT_CMD_PRE_OP);
     sleep(1);
     // IP 状态机退出 运动模式清空 进入到EN_OP
-    for (uint8_t idx = 0; idx < ManipulatorState.NumOfMotor; ++idx) {
+    for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
         IP_Mode_Deselect(driver, ManipulatorState.NodeID[idx]);
     }
 	// 驱动器状态机进入 Ready to Switch On 下
-	for (uint8_t idx = 0; idx < ManipulatorState.NumOfMotor; ++idx) {
+	for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
 		CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_DIS_OP, resVal_1);
 		/* 检查状态字决定是否执行错误复位 */
 		CAN_SDO_StatusWord(driver, ManipulatorState.NodeID[idx], resVal_1, PRINT_INFO_OFF);
