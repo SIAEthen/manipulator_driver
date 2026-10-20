@@ -125,7 +125,7 @@ static int IP_Set_Extrapolation_Cycle_Timeout(canDriver *driver, uint16_t NodeID
 /* 通过 TPDO 值，获取位置和速度信息 */
 static void IP_TPDO_Get_PosVel_Value(canDriver *driver)
 {
-	for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i)
+	for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i)
 	{
 		
 		ManipulatorState.ActualPosition[i] = 0;
@@ -141,7 +141,7 @@ static void IP_TPDO_Get_PosVel_Value(canDriver *driver)
 /* 通过 TPDO 值，获取 SW 的值 */
 static void IP_TPDO_Get_StatusCurrent_Value(canDriver *driver)
 {
-	for (uint8_t i = 0; i < ManipulatorState.NumOfJoint ; ++i)
+	for (uint8_t i = 0; i < ManipulatorState.NumOfMotor ; ++i)
 	{
 
 		ManipulatorState.ActualStatus[i] = 0;
@@ -531,11 +531,39 @@ int IP_Mode_Init_Pos(canDriver *driver)
 
     }
     //#####################################################################################################//
-    //zxh设置夹钳PDO Mapping，禁用TPDOx，RPDO1 control word， RPDO2 TargetTroque
+    //zxh设置夹钳PDO Mapping，TPDO与原始保持一致，RPDO1 control word， RPDO2 TargetTroque
     /*           销毁/禁用 TPDO1	---------------------------------------------------------------*/
     CAN_PDO_Set_ComParam(driver, PDO_T1, ManipulatorState.NodeID[6], PDO_FUNCTION_DISABLE, PDO_ASYNC_2, 0, 0);
-    /*           销毁/禁用 TPDO1	---------------------------------------------------------------*/
-    CAN_PDO_Set_ComParam(driver, PDO_T2, ManipulatorState.NodeID[6], PDO_FUNCTION_DISABLE, PDO_ASYNC_2, 0, 0);
+    /*           TPDO1 映射个数清 0 并设置新的映射对象	*/
+    ODOBJTypeDef TPDO1MappedObj[2] = {OBJ_Status_Word, OBJ_Current_Actual_Value};
+    uint8_t mappingNum = 2;
+    CAN_PDO_Set_MapParam(driver, PDO_T1, ManipulatorState.NodeID[6], mappingNum, TPDO1MappedObj);
+    //		/*           设置 TPDO1 传输类型 改变就发送	*/
+    //		CAN_PDO_Set_ComParam(driver, PDO_T1, ManipulatorState.NodeID[i], PDO_FUNCTION_SET_TRANS_TYPE, PDO_ASYNC_2, 0, 0);
+
+    /*           设置 TPDO1 传输类型 1 个 SYNC	*/
+    CAN_PDO_Set_ComParam(driver, PDO_T1, ManipulatorState.NodeID[6], PDO_FUNCTION_SET_TRANS_TYPE, PDO_Tx_1SYNC, 0, 0);
+    /*           设置 TPDO1 禁用时间 为 4*0.1ms = 400us */
+    //		CAN_PDO_Set_ComParam(driver, PDO_T1, ManipulatorState.NodeID[i], PDO_FUNCTION_SET_INHIBIT_TIME, PDO_Tx_1SYNC, 2000, 0);
+
+    /*           使能 TPDO1	*/
+    CAN_PDO_Set_ComParam(driver, PDO_T1, ManipulatorState.NodeID[6], PDO_FUNCTION_ENABLE, PDO_Tx_1SYNC, 0, 0);
+    /* TPDO1 单个节点映射收发 12 帧 */
+
+    //TPDO2 -》 Position + velocity
+    /*           销毁/禁用 TPDO2	---------------------------------------------------------------*/
+    CAN_PDO_Set_ComParam(driver, PDO_T2, ManipulatorState.NodeID[6], PDO_FUNCTION_DISABLE, PDO_Tx_1SYNC, 0, 0);
+    /*           TPDO2 映射个数清 0 并设置新的映射对象	*/
+    ODOBJTypeDef TPDO2MappedObj[2] = {OBJ_Actual_Position_User, OBJ_Actual_Velocity_User};
+    //		ODOBJTypeDef TPDO2MappedObj[1] = {OBJ_Actual_Position_User};
+    CAN_PDO_Set_MapParam(driver, PDO_T2, ManipulatorState.NodeID[6], 2, TPDO2MappedObj);
+    /*           设置 TPDO2 传输类型 1 个 SYNC	*/
+    CAN_PDO_Set_ComParam(driver, PDO_T2, ManipulatorState.NodeID[6], PDO_FUNCTION_SET_TRANS_TYPE, PDO_Tx_1SYNC, 0, 0);
+    /*           设置 TPDO2 禁用时间 为 4*0.1ms = 400us */
+    CAN_PDO_Set_ComParam(driver, PDO_T2, ManipulatorState.NodeID[6], PDO_FUNCTION_SET_INHIBIT_TIME, PDO_Tx_1SYNC, 6000, 0);
+    /*           使能 TPDO2	*/
+    CAN_PDO_Set_ComParam(driver, PDO_T2, ManipulatorState.NodeID[6], PDO_FUNCTION_ENABLE, PDO_Tx_1SYNC, 0, 0);
+    /* TPDO2 单个节点映射收发 14 帧 */
 
 
     // RPDO1 -》 CW
@@ -705,7 +733,7 @@ void IP_Mode_ReceieveState(canDriver *driver)
 
 void IP_Mode_ReceieveTPDO(canDriver *driver)
 {
-    for(uint8_t i=0;i<ManipulatorState.NumOfJoint;i++)
+    for(uint8_t i=0;i<ManipulatorState.NumOfMotor;i++)
         {
             CAN_Rx_Data_Handle(driver, ManipulatorState.NodeID[i]);
             CAN_Rx_Data_Handle(driver, ManipulatorState.NodeID[i]);

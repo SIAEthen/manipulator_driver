@@ -21,10 +21,10 @@
 typedef struct 
 {
     /* data */
-    int32_t    ActualPosition[6];
-    int32_t     ActualVelocity[6];
-    int16_t     ActualCurrent[6];
-    uint16_t    ActualStatus[6];
+    int32_t     ActualPosition[7];
+    int32_t     ActualVelocity[7];
+    int16_t     ActualCurrent[7];
+    uint16_t    ActualStatus[7];
     uint8_t     NodeID[7];
     uint8_t     NumOfJoint;
     uint8_t     NumOfMotor;

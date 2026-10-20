@@ -22,18 +22,18 @@ class ManipulatorInterface
     friend class    ManipulatorDriver;
     public:
         ManipulatorInterface(int32_t *joint_offset,uint8_t joint_num, uint8_t control_frequency, canDriver &driver);
+        // 析构函数为空；驱动器去使能和 CAN 通道关闭由外部生命周期管理。
         ~ManipulatorInterface(){
 
         }
 
-        //全局变量ManipulatorState结构体储存着机械臂各关节的信息，该结构体由主循环中的CAN通信相关函数自动更新
-        //该变量传入 updateState函数后，更新成员变量 m_jointposition ~ m_jointcurrent
+        // 读取全局 ManipulatorState 并换算关节状态，对速度、电流和加速度滤波，不接收 CAN 消息。
         void    updateState();
-        //有了joint的指令之后，调用该函数发送指令到CAN BUS
+        // 将关节位置 q（rad）换算为编码器计数，通过 CANopen RPDO 下发，不发送 SYNC。
         void    sendPosCmd(const double *q);
-        //在每个循环都应该调用该程序，发送一贞同步信息，再从全局变量中获得机械臂的当前状态
+        // 发送 SYNC，并将已有 TPDO 缓存解析到全局 ManipulatorState，不等待新反馈。
         void    sendFdbRequest();
-        // 应该以更高的频率运行该程序，循环接收CAN的消息，收到消息就把数据存储在全局变量中
+        // 高频轮询 CAN 接收并更新 TPDO 缓存，后续由 sendFdbRequest() 解析反馈。
         void    handleCANFdb();
 
         void    convertJointCmd2DriverCmd(double *position, double *velocity, int *posCmd, int *velCmd);
@@ -45,6 +45,9 @@ class ManipulatorInterface
         void    IPPosModeDisable();
         void    IPCloseGripper();
         void    IPOpenGripper();
+
+        void    computeGripperState();
+        void    initGripperPosition(const int openPosition, const int closePosition);
 
     private:
         
@@ -61,9 +64,13 @@ class ManipulatorInterface
         double m_jointacceleration[6];   // rad/s^2
         double m_jointcurrent[6];    // mA
 
-        int m_jointPositionCmd[6];   // rad
-        int m_jointVelocityCmd[6];   // rad/s
+        int m_jointPositionCmd[6];   // 驱动器位置指令，编码器计数
+        int m_jointVelocityCmd[6];   // 驱动器速度指令，原始整数单位
         int m_jointCurrentCmd[6];   
+
+        int m_gripperOpenPosition = 0;
+        int m_gripperClosePosition = 0;
+        double m_gripperAngle = 0;
 
         double m_jointDirection[6] = {-1.0,1.0,1.0,1.0,1.0,1.0};
         int32_t m_jointoffset[6];
