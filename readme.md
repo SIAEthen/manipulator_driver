@@ -27,6 +27,34 @@
 20ms一次，包括2个任务，发布jointstates，以及时刻检查速度指令是否超时。（如果超时则报warning并把期望速度置0）
 ### HandleDebugLoop
 2s一次，打印一些消息。
+
+### ROS 2 services
+
+以下服务均使用 `std_srvs/srv/Trigger`，请求为空，返回 `success` 和 `message`。
+默认节点名下的服务如下；设置 namespace 或修改节点名时，服务名称会随之改变。
+
+| 服务 | 封装接口 |
+| --- | --- |
+| `/manipulator_driver/ip_pos_mode_init` | `IPPosModeInit()` |
+| `/manipulator_driver/ip_pos_mode_enable` | `IPPosModeEnable()` |
+| `/manipulator_driver/ip_pos_mode_disable` | `IPPosModeDisable()` |
+| `/manipulator_driver/close_gripper` | `IPCloseGripper()` |
+| `/manipulator_driver/open_gripper` | `IPOpenGripper()` |
+
+节点启动时仍自动初始化并使能。需要重新初始化时，依次调用：
+
+```bash
+ros2 service call /manipulator_driver/ip_pos_mode_disable std_srvs/srv/Trigger "{}"
+ros2 service call /manipulator_driver/ip_pos_mode_init std_srvs/srv/Trigger "{}"
+ros2 service call /manipulator_driver/ip_pos_mode_enable std_srvs/srv/Trigger "{}"
+```
+
+去使能后停止规划下发；重新使能时清除旧运动目标，从当前位置重置规划器。
+夹爪服务需要机械臂处于使能状态，以便控制循环继续发送 SYNC。
+初始化、使能和去使能期间临时开启 SDO 应答等待，退出回调时恢复原接收模式。
+这些同步服务与 timer 串行执行，底层的等待和 sleep 会暂时阻塞其他回调，不能保持此期间的 8ms 控制周期。
+底层 API 返回 `void`，因此 `success=true` 仅表示接口调用正常返回，不表示硬件状态切换或夹爪动作已确认完成。
+
 ## how to use?
 
 ```#!/usr/bin/env python3

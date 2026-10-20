@@ -3,10 +3,12 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <stdexcept>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include <sensor_msgs/msg/joint_state.hpp>
 #include "rclcpp/qos.hpp"
 
@@ -24,6 +26,7 @@ int32_t jointoffset[6] = {32000, 13930,13156,31861,31692,32000+29038-65536};
 uint8_t joint_num = JointNum;
 uint8_t control_frequency = 125;
 //ManipulatorInterface(int32_t *joint_offset,uint8_t joint_num, uint8_t control_frequency, canDriver &driver);
+// 用默认canID和波特率参数初始化该变量，在Init中会根据ros param中设置的参数重新修正该参数，并初始化can driver。这样做的目的是为了在launch文件中一次控制俩手
 canDriver candriver(0,500);
 ManipulatorInterface armInterface(jointoffset,joint_num,control_frequency,candriver);
 ManipulatorPlanner armPlanner(armInterface);
@@ -36,8 +39,8 @@ class ManipulatorDriver : public rclcpp::Node
   {     
     RCLCPP_INFO(this->get_logger(), "ROS MAIN: Try to get parameters from ROS server, parameters are can_id_ and can_baud_rate_");
     this->declare_parameter<std::int64_t>("can_id_",0);
-    this->get_parameter("can_id_", can_id_);  
     this->declare_parameter<std::int64_t>("can_baud_rate_",500);
+    this->get_parameter("can_id_", can_id_);  
     this->get_parameter("can_baud_rate_", can_baud_rate_); 
     
     this->declare_parameter<float>("fauvms_joint1_offset_",0.0f);
@@ -81,11 +84,46 @@ class ManipulatorDriver : public rclcpp::Node
       .history(RMW_QOS_POLICY_HISTORY_KEEP_LAST)
       .reliability(RMW_QOS_POLICY_RELIABILITY_SYSTEM_DEFAULT); // 1秒截止时间  
 
-    publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("joint_states",qos);
+    m_jointStatePublisher = this->create_publisher<sensor_msgs::msg::JointState>("joint_states",qos);
     timerControlLoop = this->create_wall_timer(8ms, std::bind(&ManipulatorDriver::ControlLoopCallback, this));
     timerHandleCanLoop = this->create_wall_timer(1ms, std::bind(&ManipulatorDriver::HandleCanLoopCallback, this));
     timerHandleROS2Loop = this->create_wall_timer(20ms, std::bind(&ManipulatorDriver::HandleROS2Loop, this));
     timerHandleDebugLoop = this->create_wall_timer(10000ms, std::bind(&ManipulatorDriver::HandleDebugLoop, this));
+
+    // 使用默认互斥回调组，避免 service 与控制循环同时访问 CAN。
+    initService = createApiService("~/ip_pos_mode_init", [this]() {
+      if (m_controlEnabled)
+        throw std::runtime_error("Disable the manipulator before initialization.");
+      armInterface.IPPosModeInit();
+      if (!(ipModeFlags & IP_Flag_Init))
+        throw std::runtime_error("IP mode initialization failed.");
+      resetPlanner();
+    }, true);
+    enableService = createApiService("~/ip_pos_mode_enable", [this]() {
+      if (m_controlEnabled)
+        return;
+      if (!(ipModeFlags & IP_Flag_Init))
+        throw std::runtime_error("Call ip_pos_mode_init before enabling.");
+      armInterface.updateState();
+      resetPlanner();
+      armInterface.sendPosCmd(armPlanner.m_posCmd);
+      armInterface.IPPosModeEnable();
+      m_controlEnabled = true;
+    }, true);
+    disableService = createApiService("~/ip_pos_mode_disable", [this]() {
+      // 即使底层调用失败，也不再继续发送旧的运动目标。
+      m_controlEnabled = false;
+      velCmdPublishingFlag = false;
+      armInterface.IPPosModeDisable();
+    }, true);
+    closeGripperService = createApiService("~/close_gripper", [this]() {
+      requireControlEnabled();
+      armInterface.IPCloseGripper();
+    }, false);
+    openGripperService = createApiService("~/open_gripper", [this]() {
+      requireControlEnabled();
+      armInterface.IPOpenGripper();
+    }, false);
     
     auto qos_cmd = rclcpp::QoS(10).reliable().history(RMW_QOS_POLICY_HISTORY_KEEP_LAST);
     gripperCmdSub = this->create_subscription<std_msgs::msg::Bool>("open_gripper_cmd",qos_cmd,
@@ -94,10 +132,10 @@ class ManipulatorDriver : public rclcpp::Node
                                                             std::bind(&ManipulatorDriver::jointVelCmdCallback, this, std::placeholders::_1));
     jointPosCmdSub = this->create_subscription<std_msgs::msg::Float64MultiArray>("joint_pos_rad_cmd",qos_cmd,
                                                             std::bind(&ManipulatorDriver::jointPosCmdCallback, this, std::placeholders::_1));
-    if(ManipulatorMode==1){
+    if(ManipulatorPlannerMode==1){
         RCLCPP_INFO(this->get_logger(), "ROS MAIN: Manipulator Running at Velocity Mode! Try to send cmd to /joint_vel_cmd!");
     }
-    if(ManipulatorMode==2){
+    if(ManipulatorPlannerMode==2){
         RCLCPP_INFO(this->get_logger(), "ROS MAIN: Manipulator Running at Position Mode! Try to send cmd to /joint_pos_cmd!");
     }
     RCLCPP_INFO(this->get_logger(), "ROS MAIN: Manipulator driver init success! Running at different hz");
@@ -118,6 +156,50 @@ class ManipulatorDriver : public rclcpp::Node
   }
 
   private:
+    using Trigger = std_srvs::srv::Trigger;
+
+    rclcpp::Service<Trigger>::SharedPtr createApiService(
+        const std::string &name, std::function<void()> action, bool wait_for_sdo) {
+      return this->create_service<Trigger>(name,
+          [action, wait_for_sdo](const std::shared_ptr<Trigger::Request>,
+                                std::shared_ptr<Trigger::Response> response) {
+            // 析构时恢复轮询模式，包括接口抛出异常的情况。
+            struct ReadWaitGuard {
+              bool m_previous = canReadWaitFlag;
+              ~ReadWaitGuard() { canReadWaitFlag = m_previous; }
+            } read_wait_guard;
+            canReadWaitFlag = wait_for_sdo;
+            response->success = false;
+            try {
+              action();
+              response->success = true;
+              response->message = "API call completed; hardware completion is not verified.";
+            } catch (const std::exception &error) {
+              response->message = error.what();
+            } catch (...) {
+              response->message = "Unknown error while calling the manipulator API.";
+            }
+          });
+    }
+
+    void requireControlEnabled() const {
+      if (!m_controlEnabled)
+        throw std::runtime_error("Control is not enabled!");
+    }
+
+    void resetPlanner() {
+      velCmdPublishingFlag = false;
+      double zero_velocity[6] = {0};
+      armPlanner.setDesiredVelocity(zero_velocity);
+      for (unsigned char i = 0; i < JointNum; ++i)
+        armPlanner.m_velCmd[i] = 0.0;
+      switch (ManipulatorPlannerMode) {
+        case 1: armPlanner.AutoVelModeInit(); break;
+        case 2: armPlanner.AutoPosModeInit(); break;
+        default: throw std::runtime_error("Unsupported manipulator mode.");
+      }
+    }
+
     void InitManipulator(){
       //初始化candriver
       candriver.setParam(can_id_,can_baud_rate_);
@@ -126,7 +208,7 @@ class ManipulatorDriver : public rclcpp::Node
       //初始化机械臂内所有驱动器，1-6初始化为IP POS模式，7初始化为力矩模式
       armInterface.IPPosModeInit();
       RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 IP POS Mode, Joint 7 Torque Mode");
-      switch(ManipulatorMode){
+      switch(ManipulatorPlannerMode){
       case 1:
         //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
         //初始化模式标志位，初始化指令，让指令与当前位置相同
@@ -142,12 +224,15 @@ class ManipulatorDriver : public rclcpp::Node
       }
       //机械臂1-6关节使能
       armInterface.IPPosModeEnable();
+      m_controlEnabled = true;
       RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 enabled");
       // std::cout << armPlanner.m_posCmd[0]<< armPlanner.m_posCmd[1]<< armPlanner.m_posCmd[2]<< 
       // armPlanner.m_posCmd[3]<< armPlanner.m_posCmd[4]<< armPlanner.m_posCmd[5] << std::endl;
     }
     void ControlLoopCallback(){
       armInterface.updateState();
+      if (!m_controlEnabled)
+        return;
       armPlanner.run();
       armInterface.sendFdbRequest();
       return;
@@ -177,7 +262,7 @@ class ManipulatorDriver : public rclcpp::Node
           joint_state_.effort[i] = fauvms_joint_direction_[i]*armInterface.m_jointcurrent[i]*armInterface.m_driverGain[i]/1000.0;
         }
         // 发布消息
-        publisher_->publish(joint_state_);
+        m_jointStatePublisher->publish(joint_state_);
         
         checkCmdTimeout(1);
   
@@ -193,6 +278,10 @@ class ManipulatorDriver : public rclcpp::Node
     
     void gripperCmdCallback(const std_msgs::msg::Bool::SharedPtr msg) const
     {
+        if (!m_controlEnabled) {
+          RCLCPP_WARN(this->get_logger(), "Gripper command ignored: manipulator is disabled.");
+          return;
+        }
         if(msg->data){
           armInterface.IPOpenGripper();
           RCLCPP_INFO(this->get_logger(), "Open Gripper with current %d",GripperTorque);}
@@ -247,11 +336,18 @@ class ManipulatorDriver : public rclcpp::Node
     rclcpp::TimerBase::SharedPtr timerHandleCanLoop;
     rclcpp::TimerBase::SharedPtr timerHandleROS2Loop;
     rclcpp::TimerBase::SharedPtr timerHandleDebugLoop;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr m_jointStatePublisher;
 
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr jointVelCmdSub;
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr jointPosCmdSub;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr gripperCmdSub;
+
+    rclcpp::Service<Trigger>::SharedPtr initService;
+    rclcpp::Service<Trigger>::SharedPtr enableService;
+    rclcpp::Service<Trigger>::SharedPtr disableService;
+    rclcpp::Service<Trigger>::SharedPtr closeGripperService;
+    rclcpp::Service<Trigger>::SharedPtr openGripperService;
+    bool m_controlEnabled = false;
     
 
     rclcpp::Time last_cmd_time_; //for joint

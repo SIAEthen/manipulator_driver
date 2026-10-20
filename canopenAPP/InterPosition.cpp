@@ -618,20 +618,6 @@ int IP_Mode_Init_Pos(canDriver *driver)
     IP_TPDO_Get_StatusCurrent_Value(driver);
 
 
-
-
-
-    // 获取驱动器的状态值 并判断是否有错误， 如果其中的一个有错误，设置CW到06 Ready to Switch on 状态
-    /*           销毁/禁用 TPDO1	---------------------------------------------------------------*/
-    //	for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i) {
-    //		CAN_PDO_Set_ComParam(driver, PDO_T1, ManipulatorState.NodeID[i], PDO_FUNCTION_DISABLE, PDO_ASYNC_2, 0, 0);
-    //	}
-
-    // sleep(2);
-    // CAN_SYNC_Msg(driver);
-    // IP_TPDO_Get_PosVel_Value(driver);
-    // IP_TPDO_Get_StatusCurrent_Value(driver);
-
     // 设置标志位
     ipModeFlags = IP_Flag_Init;
     // 所有的都设置完，设置成功 返回 1
@@ -672,9 +658,7 @@ int IP_Mode_Enable(canDriver *driver)
         usleep(1000);
 	/* 单个节点首发 2 帧 */
 	}
-
-
-
+    return 1;
 }
 /* IP 状态下驱动器去使能
  * 写状态字清错误标志

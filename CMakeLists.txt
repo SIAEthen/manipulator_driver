@@ -19,6 +19,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
 
@@ -47,7 +48,7 @@ target_link_libraries(driver
   ${PROJECT_SOURCE_DIR}/thirdLib/canlib/libcanlib.so
 )  
 # target link desired packages
-ament_target_dependencies(driver rclcpp std_msgs sensor_msgs)
+ament_target_dependencies(driver rclcpp std_msgs std_srvs sensor_msgs)
 install(TARGETS  driver
   DESTINATION lib/${PROJECT_NAME}
   )

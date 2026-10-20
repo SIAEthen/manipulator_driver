@@ -40,6 +40,8 @@ void ManipulatorPlanner::AutoVelModeRun(){
 } 
 
 void ManipulatorPlanner::AutoPosModeInit(){
+    delete m_posController;
+    m_posController = nullptr;
     m_Mode = ManipulatorMode_AutoPos;
     double kp[6] = {KinKp1,KinKp2,KinKp3,KinKp4,KinKp5,KinKp6};
     m_posController = new PosKinController(kp,m_acc,_manipulator.m_jointposition,_manipulator.m_controlfrequency,m_maxVelocity,
