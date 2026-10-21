@@ -15,8 +15,15 @@ def generate_launch_description():
         executable="driver",
         namespace="left",
         name='manipulator',
-        parameters=[{'can_id_': 1,
-            'can_baud_rate_':500}],   
+        parameters=[{'can_id': 1,
+            'robot_joint_offsets': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            'robot_joint_directions': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            'joint_names': [
+                'joint1', 'joint2', 'joint3', 'joint4',
+                'joint5', 'joint6', 'joint_gripper1', 'joint_gripper2'],
+            'robot_gripper_torque_direction':1.0,
+            'robot_gripper_joint_direction':1.0,
+            'can_baud_rate':500}],   
         output="screen"
     )
 

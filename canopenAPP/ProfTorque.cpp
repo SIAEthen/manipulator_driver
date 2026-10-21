@@ -69,6 +69,7 @@ int PT_Halt(canDriver *driver, uint16_t NodeID)
 	return 1;
 }
 
+
 /* 退出 PT 运动模式 */
 int PT_Disable(canDriver *driver, uint16_t NodeID)
 {

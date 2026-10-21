@@ -31,25 +31,29 @@ class ManipulatorInterface
         void    updateState();
         // 将关节位置 q（rad）换算为编码器计数，通过 CANopen RPDO 下发，不发送 SYNC。
         void    sendPosCmd(const double *q);
-        // 发送 SYNC，并将已有 TPDO 缓存解析到全局 ManipulatorState，不等待新反馈。
+        // 发送 SYNC，并将已有 TPDO1和TPDO2数据 缓存解析到全局 ManipulatorState，不等待新反馈。
         void    sendFdbRequest();
         // 高频轮询 CAN 接收并更新 TPDO 缓存，后续由 sendFdbRequest() 解析反馈。
         void    handleCANFdb();
+
+
 
         void    convertJointCmd2DriverCmd(double *position, double *velocity, int *posCmd, int *velCmd);
         void    convertJointCmd2DriverCmd(double *q, int *posCmd);
         void    convertDriverFdb2JointFdb(int *posFdb, int *velFdb, int *curFdb,double *pos, double *vel, double *cur);
 
-        void    IPPosModeInit();
-        void    IPPosModeEnable();
-        void    IPPosModeDisable();
-        void    IPCloseGripper();
-        void    IPOpenGripper();
+        int     IPPosModeInit();
+        int     IPPosModeEnable();
+        int     IPPosModeDisable();
+        int     IPCloseGripper();
+        int     IPOpenGripper();
 
         void    computeGripperState();
         void    initGripperPosition(const int openPosition, const int closePosition);
+        void    setGripperOpenAngle(double angle) { m_gripperOpenAngle = angle; } // rad
 
     private:
+
         
         // double m_jointUpperLimits[6] = {DEG2RAD(90),DEG2RAD(170),DEG2RAD(120),DEG2RAD(50),DEG2RAD(90),DEG2RAD(180)};
         // // -0.5是2关节的机械极限， -0.126是3关节的机械极限
@@ -70,6 +74,9 @@ class ManipulatorInterface
 
         int m_gripperOpenPosition = 0;
         int m_gripperClosePosition = 0;
+        double m_gripperOpenAngle = PI / 2.0;
+        double m_gripperTorqueDirection = 1.0;
+        double m_gripperJointDirection = 1.0;
         double m_gripperAngle = 0;
 
         double m_jointDirection[6] = {-1.0,1.0,1.0,1.0,1.0,1.0};

@@ -40,6 +40,8 @@ public:
     int canDriverWriteSync(unsigned long time_wait_ms);
     int initialize();
     int deinitialize();
+
+    int flushCANBuffer();
 private:
     canHandle hnd;
     // unsigned char rxdata[8];

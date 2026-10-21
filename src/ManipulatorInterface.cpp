@@ -1,5 +1,6 @@
 #include "ManipulatorInterface.h"
 
+
 // 机械臂接口：负责反馈换算与滤波、关节指令转换和发送、驱动器使能及夹爪控制。
 // 运动规划由 ManipulatorPlanner 完成，本类通过传入的 canDriver 访问 CANopen 驱动器。
 
@@ -35,20 +36,21 @@ void ManipulatorInterface::updateState()
     for(uint8_t i=0;i<m_jointnum;i++){
         m_jointposition[i] = (ManipulatorState.ActualPosition[i]-m_jointoffset[i])*PENCODER2RAD*m_jointDirection[i];
         if(i==5){
-            // 腕部关节使用 0.005 rad/s 阈值和更强的低通滤波。
-            // 注意：当前判断使用旧滤波值，从零初始化后会持续置零，无法引入新的速度反馈。
-            if(std::abs(m_jointvelocity[i])<0.005){
-                m_jointvelocity[i] = 0;
-            }else{
-                m_jointvelocity[i] = 0.99*m_jointvelocity[i] + 0.01* (ManipulatorState.ActualVelocity[i])*VENCODER2RADS*m_jointDirection[i];
-            }
+            // 腕部关节使用更强的低通滤波。
+            m_jointvelocity[i] = 0.99*m_jointvelocity[i] + 0.01* (ManipulatorState.ActualVelocity[i])*VENCODER2RADS*m_jointDirection[i];
         }else{
             // 其余关节：保留 80% 的旧速度，加入 20% 的当前反馈。
             m_jointvelocity[i] = 0.8*m_jointvelocity[i] + 0.2* (ManipulatorState.ActualVelocity[i])*VENCODER2RADS*m_jointDirection[i];
         }
+        if(std::abs(m_jointvelocity[i]) < 1e-5){
+            m_jointvelocity[i] = 0.0;
+        }
 
         // 驱动器电流反馈以额定电流的千分比表示，换算为 mA 后进行低通滤波。
         m_jointcurrent[i]  = 0.9*m_jointcurrent[i] + 0.1* ManipulatorState.ActualCurrent[i]*m_jointDirection[i]/1000.0 * m_ratedCurrent[i];
+        if(std::abs(m_jointcurrent[i]) < 1e-5){
+            m_jointcurrent[i] = 0.0;
+        }
 
         // 用控制频率近似 1/dt，计算速度差分并低通滤波，再保存本周期速度。
         m_jointacceleration[i] = 0.99* m_jointacceleration[i] + 0.01*(m_jointvelocity[i]-m_previousVelocity[i])*double(m_controlfrequency);   //hnz_add
@@ -74,9 +76,18 @@ void ManipulatorInterface::initGripperPosition(const int openPosition, const int
 void ManipulatorInterface::computeGripperState()
 {
     int gripperEncoderPosition = ManipulatorState.ActualPosition[6];
+    
+    const double encoderRange = static_cast<double>(m_gripperOpenPosition)
+                              - m_gripperClosePosition;
+    if (encoderRange == 0.0) {
+        m_gripperAngle = 0.0;
+        return;
+    }
 
-    // TODO：根据当前位置和全开、全闭标定位置计算角度，并写入 m_gripperAngle。
-    m_gripperAngle = 0.0;
+    const double opening = (static_cast<double>(gripperEncoderPosition)
+                            - m_gripperClosePosition) / encoderRange;
+    m_gripperAngle = (opening < 0.0 ? 0.0 : (opening > 1.0 ? 1.0 : opening))
+                   * m_gripperOpenAngle;
     return;
 }
 
@@ -104,6 +115,7 @@ void    ManipulatorInterface::sendFdbRequest(){
 
 // 轮询接收 CAN 消息并更新 TPDO 缓存，主循环中通常以高于控制循环的频率调用。
 // 缓存经 sendFdbRequest() 解析后，再由 updateState() 换算为本类的关节状态。
+// PDO开始后，can接收消息不等待，没有消息立马返回。
 void    ManipulatorInterface::handleCANFdb(){
     IP_Mode_ReceieveTPDO(&_m_driver);
 }
@@ -139,17 +151,14 @@ void ManipulatorInterface::convertDriverFdb2JointFdb(int *posFdb, int *velFdb, i
 /**
  * 配置 1～6 号关节为 IP 插补位置模式（8 ms 周期），7 号夹爪电机为力矩模式。
  * CAN 通道需已初始化；完成后仍需初始化规划器，再调用 IPPosModeEnable() 使能关节。
- * 当前接口未向调用方返回底层初始化是否成功。
+ * 返回 1 表示底层初始化成功，0 表示失败。
  */
-void ManipulatorInterface::IPPosModeInit(){
-    
-    if(IP_Mode_Init_Pos(&_m_driver)){
-        //加入显示
-    }
+int ManipulatorInterface::IPPosModeInit(){
+    if (IP_Mode_Init_Pos(&_m_driver) != 1) return 0;
     // 连续进行 5 轮同步请求、CAN 接收和状态更新，每轮等待 30 ms。
     for(uint i=0;i<5;i++){
-        sendFdbRequest();
-        handleCANFdb();
+        sendFdbRequest(); // 1个syn信号
+        handleCANFdb();   // 尝试读取14个数据
         updateState();
         usleep(30000);
     }
@@ -161,32 +170,29 @@ void ManipulatorInterface::IPPosModeInit(){
     }
 
     // 额定电流目前使用头文件中的 m_ratedCurrent 配置，此处尚未实现从驱动器读取。
-
-    
-    
+    return 1;
 }
 
 // 在驱动器配置和规划器初始命令准备完成后，使能 1～6 号关节及 IP 插补。
-// 夹爪在底层初始化力矩模式时已使能；当前接口未向调用方返回使能结果。
-void ManipulatorInterface::IPPosModeEnable(){
-    if(IP_Mode_Enable(&_m_driver)){
-    }
+// 夹爪在底层初始化力矩模式时已使能；返回 1 表示使能成功，0 表示失败。
+int ManipulatorInterface::IPPosModeEnable(){
+    return IP_Mode_Enable(&_m_driver) == 1 ? 1 : 0;
 }
 // 退出 IP 插补，对关节及夹爪驱动器去使能，并使 CANopen 节点进入预操作状态。
 // 本函数不关闭 CAN 通道，通道由 canDriver 管理。
-void    ManipulatorInterface::IPPosModeDisable(){
-    IP_Mode_Disable(&_m_driver);
+int ManipulatorInterface::IPPosModeDisable(){
+    return IP_Mode_Disable(&_m_driver) == 1 ? 1 : 0;
 }
-// 通过 RPDO 向夹爪电机发送正向目标力矩，闭合夹爪。
+// 按配置的夹爪方向，通过 RPDO 发送目标力矩以闭合夹爪。
 // GripperTorque 使用驱动器力矩模式的目标值单位，并非直接以 N·m 表示。
-void ManipulatorInterface::IPCloseGripper()
+int ManipulatorInterface::IPCloseGripper()
 {
-    PDO_Set_TargetTorque(&_m_driver,int16_t(GripperTorque));//闭合
+    return PDO_Set_TargetTorque(&_m_driver,int16_t(m_gripperTorqueDirection * GripperTorque));
 }
-// 通过 RPDO 向夹爪电机发送 -GripperTorque，以相反方向打开夹爪。
-void ManipulatorInterface::IPOpenGripper()
+// 按闭合的相反方向打开夹爪；torque 为额定电流的千分比。
+int ManipulatorInterface::IPOpenGripper()
 {
-    PDO_Set_TargetTorque(&_m_driver,int16_t(-1*GripperTorque));//open
+    return PDO_Set_TargetTorque(&_m_driver,int16_t(-m_gripperTorqueDirection * GripperTorque));
 }
 
 // 以下为全局辅助函数，不属于 ManipulatorInterface 成员。

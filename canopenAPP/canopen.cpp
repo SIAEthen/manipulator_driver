@@ -39,6 +39,7 @@ int CANOPEN_Receieve_Msg(canDriver *driver)
 		if (canRxHeader.DLC > sizeof(canRxDataStruct.m_CanRxData)) return 0;
 		memcpy(canRxDataStruct.m_CanRxData, canRxData, canRxHeader.DLC);
 
+		canRxDataTypeFlag = {};
 
 		if (COBID_fc == FC_EMERGENCY && canRxHeader.DLC == 8) {
 			canRxDataTypeFlag.m_EMYC_flag = 1;
@@ -91,9 +92,15 @@ int CANOPEN_Receieve_Msg(canDriver *driver)
  */
 int CAN_Rx_Data_Handle(canDriver *driver, uint16_t NodeID)
 {
-	 if(!CANOPEN_Receieve_Msg(driver)){
-		return 0;
-	 }
+	// if(!CANOPEN_Receieve_Msg(driver)){
+	// return 0;
+	// }
+	
+	//切换以下代码结构，可以在遇到emyc数据时，在CANOPEN_Receieve_Msg中优先处理，同时继续读，直到读到正常报文
+	do {
+    if (!CANOPEN_Receieve_Msg(driver))
+        return 0;
+	} while (canRxDataTypeFlag.m_EMYC_flag);
 
 	if ((   !canRxDataTypeFlag.m_TSDO_flag &&
 			!canRxDataTypeFlag.m_NODE_GUARD_flag &&

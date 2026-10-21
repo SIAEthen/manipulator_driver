@@ -27,6 +27,7 @@ find_package(sensor_msgs REQUIRED)
 add_executable(driver 
 # common file
 src/main.cpp 
+src/ManipulatorDriver.cpp
 src/canDriver.cpp  
 src/ManipulatorInterface.cpp 
 src/ManipulatorPlanner.cpp
@@ -52,6 +53,11 @@ ament_target_dependencies(driver rclcpp std_msgs std_srvs sensor_msgs)
 install(TARGETS  driver
   DESTINATION lib/${PROJECT_NAME}
   )
+
+install(PROGRAMS scripts/gripper_help.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME gripper_help
+)
   
 install(
   DIRECTORY launch 

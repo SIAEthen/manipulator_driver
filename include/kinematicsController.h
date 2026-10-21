@@ -2,9 +2,6 @@
 #define __KINEMATICS_CONTROLLER__H__
 #include <cmath>
 #include "defines.h"
-#ifndef JointNum
-#define JointNum 6
-#endif
 
 
 class PosKinController
@@ -17,13 +14,13 @@ public:
     int updateJointPositionCmd(double *desPosition,double *curPosition,double *cmdPosition);
 
 private:
-    double m_Kp[JointNum];
-    double m_acc[JointNum];
-    double m_PosCmd[JointNum];
-    double m_VelCmd[JointNum];
-    double m_maxVel[JointNum];
-    double m_jointUpperLimit[JointNum];
-    double m_jointLowerLimit[JointNum];
+    double m_Kp[6];
+    double m_acc[6];
+    double m_PosCmd[6];
+    double m_VelCmd[6];
+    double m_maxVel[6];
+    double m_jointUpperLimit[6];
+    double m_jointLowerLimit[6];
     double m_runningRate;
 };
 

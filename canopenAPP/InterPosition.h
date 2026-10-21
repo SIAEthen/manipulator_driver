@@ -47,5 +47,5 @@ void IP_Mode_ReceieveTPDO(canDriver *driver);
 
 int IP_Mode_Enable(canDriver *driver);
 
-void PDO_Set_TargetTorque(canDriver *driver, int16_t targetTorque);
+int PDO_Set_TargetTorque(canDriver *driver, int16_t targetTorque);
 #endif /* APP_INC_IPMODE_H_ */

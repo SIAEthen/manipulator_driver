@@ -205,7 +205,7 @@ static int IP_Send_Position(canDriver *driver, uint8_t NodeId, int32_t posValue)
     return 1;
 }
 
-/* 用RPDO发送IP的位置数据 */
+/* 用RPDO发送夹爪点击的电流数据 */
 static int IP_Send_Torque(canDriver *driver, uint8_t NodeId, int16_t torqueValue)
 {
     uint8_t txData[8] = {(torqueValue>>0)&0xFF, (torqueValue>>8)&0xFF};
@@ -421,7 +421,9 @@ int IP_Mode_Init(canDriver *driver)
 
 int IP_Mode_Init_Pos(canDriver *driver)
 {
-
+    //先清空canBuffer
+    if(!driver->flushCANBuffer())
+        return 0;
     // 判断标志位
     if (ipModeFlags&IP_Flag_Init)
         return 0;
@@ -530,6 +532,8 @@ int IP_Mode_Init_Pos(canDriver *driver)
         /* RPDO1 单个节点映射收发 12 帧 */
 
     }
+    
+    
     //#####################################################################################################//
     //zxh设置夹钳PDO Mapping，TPDO与原始保持一致，RPDO1 control word， RPDO2 TargetTroque
     /*           销毁/禁用 TPDO1	---------------------------------------------------------------*/
@@ -599,16 +603,17 @@ int IP_Mode_Init_Pos(canDriver *driver)
     //4. 设置NMT，节点进入NMT 开始状态 , 00 -》所有节点
     CAN_NMT_Switch_State(driver, 0x00, NMT_CMD_START);
     sleep(1);
-    // 接收7个驱动器回复的消息
+    // 接收7个驱动器回复的消息,这里其实没有消息，这样是确认buffer里面是干净的。
     for(uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i)
     {
+        CAN_Rx_Data_Handle(driver, ManipulatorState.NodeID[i]);
         CAN_Rx_Data_Handle(driver, ManipulatorState.NodeID[i]);
     }
 
     /* NMT 进入启动状态 1 帧 -- 如果是通电后第一次启动 SW TPDO 数据有从节点个数个 */
     usleep(5000);
     CAN_SYNC_Msg(driver);
-    for(uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i)
+    for(uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i)
     {
         CAN_Rx_Data_Handle(driver, ManipulatorState.NodeID[i]);
         CAN_Rx_Data_Handle(driver, ManipulatorState.NodeID[i]);
@@ -637,7 +642,8 @@ int IP_Mode_Init_Pos(canDriver *driver)
 // 让机械比关节1-6使能，注意，此时夹爪已经使能，不需要额外使能
 int IP_Mode_Enable(canDriver *driver)
 {
-
+    if(!driver->flushCANBuffer())
+        return 0;
 	//5. 设置控制字让电机进入到 EN_OP 状态下
 	for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i) {
 		if (1 != IP_CW_Enable_Operation(driver, ManipulatorState.NodeID[i]))	return 0;
@@ -666,18 +672,22 @@ int IP_Mode_Enable(canDriver *driver)
 // 让所有的驱动器都切换到ready to Switch On
 int IP_Mode_Disable(canDriver *driver)
 {
+    
+    int success = 1;
 	uint16_t resVal_1[1] = {0};
 	// CAN_SYNC_Msg(driver);
 	// sleep(1);
 
     // 让所有的驱动器都去使能
     for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
-        PDO_IP_Inactive(driver, ManipulatorState.NodeID[idx]); // PDO取消激活
+        if (PDO_IP_Inactive(driver, ManipulatorState.NodeID[idx]) != 1) success = 0; // PDO取消激活
         usleep(2000);
     }
 
+    if(!driver->flushCANBuffer())
+        return 0;
     for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
-        IP_CW_Switch_On_Disable(driver, ManipulatorState.NodeID[idx]); // 驱动器转化为switch on disable，所有驱动器都一样
+        if (IP_CW_Switch_On_Disable(driver, ManipulatorState.NodeID[idx]) != 1) success = 0; // 驱动器转化为switch on disable，所有驱动器都一样
 		usleep(2000);
 	}
 	usleep(2000);
@@ -686,26 +696,48 @@ int IP_Mode_Disable(canDriver *driver)
 
 
     // 所有NMT进入 Pre Op 状态下，禁用PDO
-    CAN_NMT_Switch_State(driver, 00, NMT_CMD_PRE_OP);
+    if (CAN_NMT_Switch_State(driver, 00, NMT_CMD_PRE_OP) != 1) success = 0;
     sleep(1);
+    
+    //延迟1s后，IP插补会出现under flow错误 msg
+    if(!driver->flushCANBuffer())
+        return 0;
     // IP 状态机退出 运动模式清空 进入到EN_OP
     for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
-        IP_Mode_Deselect(driver, ManipulatorState.NodeID[idx]);
+        if (IP_Mode_Deselect(driver, ManipulatorState.NodeID[idx]) != 1) 
+        success = 0;
+        usleep(2000);
     }
 	// 驱动器状态机进入 Ready to Switch On 下
 	for (uint8_t idx = 0; idx < ManipulatorState.NumOfJoint; ++idx) {
-		CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_DIS_OP, resVal_1);
+		if (CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_DIS_OP, resVal_1) != 1) 
+        success = 0;
+        usleep(2000);
 		/* 检查状态字决定是否执行错误复位 */
-		CAN_SDO_StatusWord(driver, ManipulatorState.NodeID[idx], resVal_1, PRINT_INFO_OFF);
+		if (CAN_SDO_StatusWord(driver, ManipulatorState.NodeID[idx], resVal_1, PRINT_INFO_OFF) != 1) 
+        success = 0;
+        usleep(2000);
 		if ( resVal_1[0] & SW_FAULT)
-			if (1 != CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_FAULT_RESELT, resVal_1)) return 0;
-		CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_SHUT_DOWN, resVal_1);
+			if (1 != CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_FAULT_RESELT, resVal_1)) 
+            success = 0;
+        usleep(2000);
+		if (CAN_SDO_ControlWord(driver, ManipulatorState.NodeID[idx], CW_SHUT_DOWN, resVal_1) != 1) 
+        success = 0;
+        usleep(2000);
 	}
+
+
+    // 消除未读取的TPDO数据
+    // SDO 控制PT模式去使能
+    if(!driver->flushCANBuffer())
+        return 0;
+    if (PT_Disable(driver,ManipulatorState.NodeID[6]) != 1) 
+    success = 0;
 
 // 初始化完成标志位复位
 	ipModeFlags = IP_Flag_Clc;
 
-	return 1;
+	return success;
 }
 
 void IP_Mode_ReceieveState(canDriver *driver)
@@ -742,7 +774,7 @@ void IP_Mode_SendCommandPos(canDriver *driver,int32_t *posCMD)
 
 }
 
-void PDO_Set_TargetTorque(canDriver *driver, int16_t targetTorque){
-
-    IP_Send_Torque(driver, ManipulatorState.NodeID[6], targetTorque);
+//static类型外部文件不允许调用，所以做了这个接口
+int PDO_Set_TargetTorque(canDriver *driver, int16_t targetTorque){
+    return IP_Send_Torque(driver, ManipulatorState.NodeID[6], targetTorque);
 }

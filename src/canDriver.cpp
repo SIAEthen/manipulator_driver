@@ -121,6 +121,17 @@ int canDriver::canDriverWriteSync(unsigned long time_wait_ms)
     return 0;
 }
 
+int    canDriver::flushCANBuffer(){
+    // 
+    if(canFlushReceiveQueue(hnd) == canOK){
+        return 1;
+    } 
+    else{
+        return 0;
+    }
+    
+}
+
 
 
 

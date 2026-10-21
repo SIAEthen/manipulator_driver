@@ -46,7 +46,7 @@ void ManipulatorPlanner::AutoPosModeInit(){
     double kp[6] = {KinKp1,KinKp2,KinKp3,KinKp4,KinKp5,KinKp6};
     m_posController = new PosKinController(kp,m_acc,_manipulator.m_jointposition,_manipulator.m_controlfrequency,m_maxVelocity,
                                             _manipulator.m_jointUpperLimits,_manipulator.m_jointLowerLimits);
-    for(unsigned char i=0;i<JointNum;i++){
+    for(unsigned char i=0;i<ManipulatorState.NumOfJoint;i++){
         m_posCmd[i] = _manipulator.m_jointposition[i];
         m_posModePositionDes[i] = _manipulator.m_jointposition[i];
     }
@@ -103,7 +103,7 @@ void ManipulatorPlanner::setDesiredVelocity(double* dq){
 void ManipulatorPlanner::setDesiredPosition(double* q){
 
     //对速度进行限制
-    for(unsigned char i=0;i<JointNum;i++){
+    for(unsigned char i=0;i<ManipulatorState.NumOfJoint;i++){
         m_posModePositionDes[i] = q[i];
     }
 }
