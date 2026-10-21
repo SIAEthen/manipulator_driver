@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
@@ -23,6 +24,7 @@ def generate_launch_description():
                 'joint5', 'joint6', 'joint_gripper1', 'joint_gripper2'],
             'robot_gripper_torque_direction':1.0,
             'robot_gripper_joint_direction':1.0,
+            'robot_gripper_angle_offset': -math.pi / 2.0,
             'can_baud_rate':500}],   
         output="screen"
     )

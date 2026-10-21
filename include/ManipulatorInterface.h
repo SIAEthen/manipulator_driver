@@ -74,9 +74,10 @@ class ManipulatorInterface
 
         int m_gripperOpenPosition = 0;
         int m_gripperClosePosition = 0;
-        double m_gripperOpenAngle = PI / 2.0;
+        double m_gripperOpenAngle = PI / 4.0;
         double m_gripperTorqueDirection = 1.0;
         double m_gripperJointDirection = 1.0;
+        double m_gripperAngleOffset = 0.0; // rad
         double m_gripperAngle = 0;
 
         double m_jointDirection[6] = {-1.0,1.0,1.0,1.0,1.0,1.0};

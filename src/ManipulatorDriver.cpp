@@ -51,8 +51,10 @@ ManipulatorDriver::ManipulatorDriver()
 
   this->declare_parameter<double>("robot_gripper_torque_direction", 1.0);
   this->declare_parameter<double>("robot_gripper_joint_direction", 1.0);
+  this->declare_parameter<double>("robot_gripper_angle_offset", 0.0);
   this->get_parameter("robot_gripper_torque_direction", armInterface.m_gripperTorqueDirection);
   this->get_parameter("robot_gripper_joint_direction", armInterface.m_gripperJointDirection);
+  this->get_parameter("robot_gripper_angle_offset", armInterface.m_gripperAngleOffset);
   if (armInterface.m_gripperTorqueDirection != 1.0 && armInterface.m_gripperTorqueDirection != -1.0)
     throw std::invalid_argument("robot_gripper_torque_direction must be 1.0 or -1.0.");
 
@@ -318,7 +320,8 @@ void ManipulatorDriver::handleROS2Loop()
     joint_state.effort[i] =
         m_robotJointDirection[i] * armInterface.m_jointcurrent[i] * armInterface.m_driverGain[i] / 1000.0;
   }
-  joint_state.position[6] = armInterface.m_gripperJointDirection * armInterface.m_gripperAngle;
+  joint_state.position[6] = armInterface.m_gripperAngleOffset +
+      armInterface.m_gripperJointDirection * armInterface.m_gripperAngle;
   joint_state.position[7] = -1 * joint_state.position[6];
 
   m_jointStatePublisher->publish(joint_state);
