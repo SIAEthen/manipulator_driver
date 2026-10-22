@@ -8,7 +8,7 @@
 #include "InterPosition.h"
 #include "defines.h"
 #include "GlobalVariables.h"
-
+#include "ProfVelocity.h"
 
 double DEG2RAD(double deg);
 double RAD2DEG(double rad);
@@ -42,11 +42,17 @@ class ManipulatorInterface
         void    convertJointCmd2DriverCmd(double *q, int *posCmd);
         void    convertDriverFdb2JointFdb(int *posFdb, int *velFdb, int *curFdb,double *pos, double *vel, double *cur);
 
-        int     IPPosModeInit();
-        int     IPPosModeEnable();
-        int     IPPosModeDisable();
-        int     IPCloseGripper();
-        int     IPOpenGripper();
+        int     initIPPosMode();
+        int     enableIPPosMode();
+        int     disableIPPosMode();
+
+        int     initPVMode();
+        int     enablePVMode();
+        int     disablePVMode();
+
+
+        int     closeGripperPDOCmd();
+        int     openGripperPDOCmd();
 
         void    computeGripperState();
         void    initGripperPosition(const int openPosition, const int closePosition);
@@ -72,13 +78,14 @@ class ManipulatorInterface
         int m_jointVelocityCmd[6];   // 驱动器速度指令，原始整数单位
         int m_jointCurrentCmd[6];   
 
-        int m_gripperOpenPosition = 0;
+        int m_gripperOpenPosition = 100000;
         int m_gripperClosePosition = 0;
-        double m_gripperOpenAngle = PI / 4.0;
+        double m_gripperOpenAngle = PI / 4.0; //夹钳张开行程
         double m_gripperTorqueDirection = 1.0;
         double m_gripperJointDirection = 1.0;
         double m_gripperAngleOffset = 0.0; // rad
         double m_gripperAngle = 0;
+        double m_gripperCurrent = 0;
 
         double m_jointDirection[6] = {-1.0,1.0,1.0,1.0,1.0,1.0};
         int32_t m_jointoffset[6];

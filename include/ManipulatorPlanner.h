@@ -51,8 +51,6 @@ class ManipulatorPlanner
     protected:
         double m_velCmd[6] = {0};
         double m_posCmd[6] = {0};
-
-
 };
 
 

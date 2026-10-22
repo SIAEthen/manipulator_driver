@@ -1,5 +1,6 @@
 #include "ManipulatorDriver.h"
 
+#include <bitset>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -74,78 +75,50 @@ ManipulatorDriver::ManipulatorDriver()
   m_ros2LoopTimer = this->create_wall_timer(20ms, std::bind(&ManipulatorDriver::handleROS2Loop, this));
   m_debugLoopTimer = this->create_wall_timer(5000ms, std::bind(&ManipulatorDriver::handleDebugLoop, this));
 
-  m_initService = createApiService("~/ip_pos_mode_init", [this]() {
-    if (m_controlEnabled)
-      throw std::runtime_error("Disable the manipulator before initialization.");
-    if (ipModeFlags & IP_Flag_Init)
-      throw std::runtime_error("Init is already finished!");
-    if (armInterface.IPPosModeInit() != 1 || !(ipModeFlags & IP_Flag_Init))
-      throw std::runtime_error("IP mode initialization failed.");
-    resetPlanner();
-  }, true);
+  m_initService = this->create_service<Trigger>(
+      "~/motion_init",
+      std::bind(&ManipulatorDriver::motionInitCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
-  m_enableService = createApiService("~/ip_pos_mode_enable", [this]() {
-    if (m_controlEnabled)
-      return;
-    if (!(ipModeFlags & IP_Flag_Init))
-      throw std::runtime_error("Call ip_pos_mode_init before enabling.");
-    armInterface.updateState();
-    resetPlanner();
-    armInterface.sendPosCmd(armPlanner.m_posCmd);
-    if (armInterface.IPPosModeEnable() != 1)
-      throw std::runtime_error("IP mode enable failed.");
-    m_controlEnabled = true;
-  }, true);
+  m_enableService = this->create_service<Trigger>(
+      "~/motion_enable",
+      std::bind(&ManipulatorDriver::motionEnableCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
-  m_disableService = createApiService("~/ip_pos_mode_disable", [this]() {
-    if (!m_controlEnabled)
-      return;
-    m_controlEnabled = false;
-    m_velCmdPublishingFlag = false;
-    if (armInterface.IPPosModeDisable() != 1)
-      throw std::runtime_error("IP mode disable failed.");
-  }, true);
+  m_disableService = this->create_service<Trigger>(
+      "~/motion_disable",
+      std::bind(&ManipulatorDriver::motionDisableCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
-  m_closeGripperService = createApiService("~/close_gripper", [this]() {
-    requireControlEnabled();
-    if (armInterface.IPCloseGripper() != 1)
-      throw std::runtime_error("Close gripper command failed.");
-  }, false);
+  m_closeGripperService = this->create_service<Trigger>(
+      "~/close_gripper",
+      std::bind(&ManipulatorDriver::closeGripperCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
-  m_openGripperService = createApiService("~/open_gripper", [this]() {
-    requireControlEnabled();
-    if (armInterface.IPOpenGripper() != 1)
-      throw std::runtime_error("Open gripper command failed.");
-  }, false);
+  m_openGripperService = this->create_service<Trigger>(
+      "~/open_gripper",
+      std::bind(&ManipulatorDriver::openGripperCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
-  m_setGripperOpenPositionService = createApiService("~/set_gripper_open_position", []() {
-    armInterface.m_gripperOpenPosition = ManipulatorState.ActualPosition[6];
-    armInterface.computeGripperState();
-  }, false);
+  m_setGripperOpenPositionService = this->create_service<Trigger>(
+      "~/set_gripper_open_position",
+      std::bind(&ManipulatorDriver::setGripperOpenPositionCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
-  m_setGripperClosePositionService = createApiService("~/set_gripper_close_position", []() {
-    armInterface.m_gripperClosePosition = ManipulatorState.ActualPosition[6];
-    armInterface.computeGripperState();
-  }, false);
+  m_setGripperClosePositionService = this->create_service<Trigger>(
+      "~/set_gripper_close_position",
+      std::bind(&ManipulatorDriver::setGripperClosePositionCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
   m_clearEmergenciesService = this->create_service<Trigger>(
       "~/clear_emergencies",
-      [](const std::shared_ptr<Trigger::Request>,
-         std::shared_ptr<Trigger::Response> response) {
-        for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i)
-          ManipulatorState.Emergency[i] = {};
-        response->success = true;
-        response->message = "Cached emergency codes cleared; drive faults were not reset.";
-      });
+      std::bind(&ManipulatorDriver::clearEmergenciesCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
   m_debugService = this->create_service<std_srvs::srv::SetBool>(
       "~/set_debug",
-      [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-             std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
-        m_debugEnabled = request->data;
-        response->success = true;
-        response->message = m_debugEnabled ? "Debug output enabled." : "Debug output disabled.";
-      });
+      std::bind(&ManipulatorDriver::setDebugCallback, this,
+                std::placeholders::_1, std::placeholders::_2));
 
   auto qos_cmd = rclcpp::QoS(10).reliable().history(RMW_QOS_POLICY_HISTORY_KEEP_LAST);
   m_gripperCmdSub = this->create_subscription<std_msgs::msg::Bool>(
@@ -168,7 +141,7 @@ ManipulatorDriver::ManipulatorDriver()
               m_jointPosCmdSub->get_topic_name(), m_jointVelCmdSub->get_topic_name());
   RCLCPP_INFO(this->get_logger(), "Gripper command: %s (true=open, false=close); joint feedback: %s.",
               m_gripperCmdSub->get_topic_name(), m_jointStatePublisher->get_topic_name());
-  RCLCPP_INFO(this->get_logger(), "Services under %s/: ip_pos_mode_init, ip_pos_mode_enable, ip_pos_mode_disable, open_gripper, close_gripper.",
+  RCLCPP_INFO(this->get_logger(), "Services under %s/: motion_init, motion_enable, motion_disable, open_gripper, close_gripper.",
               this->get_fully_qualified_name());
   RCLCPP_INFO(this->get_logger(), "Calibration services: set_gripper_open_position, set_gripper_close_position; calibration is stored in memory.");
   RCLCPP_INFO(this->get_logger(), "Diagnostics: clear_emergencies clears cached errors; set_debug enables command and motor status logs every 5 s (default off).");
@@ -178,13 +151,13 @@ ManipulatorDriver::ManipulatorDriver()
 ManipulatorDriver::~ManipulatorDriver()
 {
   if (!m_controlEnabled) {
-    RCLCPP_INFO(this->get_logger(), "Manipulator already disabled; skipping IPPosModeDisable.");
+    RCLCPP_INFO(this->get_logger(), "Manipulator already disabled; skipping disableIPPosMode.");
   } else {
     m_controlEnabled = false;
     RCLCPP_INFO(this->get_logger(), "Disabling manipulator before CAN shutdown...");
     const bool previousReadWait = canReadWaitFlag;
     canReadWaitFlag = true;
-    const bool disableSucceeded = armInterface.IPPosModeDisable() == 1;
+    const bool disableSucceeded = armInterface.disableIPPosMode() == 1;
     canReadWaitFlag = previousReadWait;
     if (disableSucceeded)
       RCLCPP_INFO(this->get_logger(), "Manipulator disable call succeeded.");
@@ -196,32 +169,193 @@ ManipulatorDriver::~ManipulatorDriver()
   RCLCPP_INFO(this->get_logger(), "CAN deinitialize call completed.");
 }
 
-// 为同步服务临时选择 CAN 接收方式：wait_for_sdo 为 true 时等待 SDO 应答，
-// 否则使用非阻塞读取；回调结束（包括异常）后恢复原来的读取方式。
-rclcpp::Service<ManipulatorDriver::Trigger>::SharedPtr ManipulatorDriver::createApiService(
-    const std::string &name, std::function<void()> action, bool wait_for_sdo)
+void ManipulatorDriver::motionInitCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
 {
-  return this->create_service<Trigger>(
-      name,
-      [action, wait_for_sdo](const std::shared_ptr<Trigger::Request>,
-                             std::shared_ptr<Trigger::Response> response) {
-        struct ReadWaitGuard {
-          bool previous = canReadWaitFlag;
-          ~ReadWaitGuard() { canReadWaitFlag = previous; }
-        } read_wait_guard;
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = true;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    if (m_controlEnabled)
+      throw std::runtime_error("Disable the manipulator before initialization.");
+    if (ipModeFlags & IP_Flag_Init)
+      throw std::runtime_error("Init is already finished!");
+    if (armInterface.initIPPosMode() != 1 || !(ipModeFlags & IP_Flag_Init))
+      throw std::runtime_error("IP mode initialization failed.");
+    resetPlanner();
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
 
-        canReadWaitFlag = wait_for_sdo;
-        response->success = false;
-        try {
-          action();
-          response->success = true;
-          response->message = "API call completed; hardware completion is not verified.";
-        } catch (const std::exception &error) {
-          response->message = error.what();
-        } catch (...) {
-          response->message = "Unknown error while calling the manipulator API.";
-        }
-      });
+void ManipulatorDriver::motionEnableCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = true;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    if (m_controlEnabled) {
+      canReadWaitFlag = previousReadWait;
+      return;
+    }
+    if (!(ipModeFlags & IP_Flag_Init))
+      throw std::runtime_error("Call motion_init before enabling.");
+    armInterface.updateState();
+    resetPlanner();
+    armInterface.sendPosCmd(armPlanner.m_posCmd);
+    if (armInterface.enableIPPosMode() != 1)
+      throw std::runtime_error("IP mode enable failed.");
+    m_controlEnabled = true;
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
+
+void ManipulatorDriver::motionDisableCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = true;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    if (!m_controlEnabled) {
+      canReadWaitFlag = previousReadWait;
+      return;
+    }
+    m_controlEnabled = false;
+    m_velCmdPublishingFlag = false;
+    if (armInterface.disableIPPosMode() != 1)
+      throw std::runtime_error("IP mode disable failed.");
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
+
+void ManipulatorDriver::closeGripperCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = false;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    requireControlEnabled();
+    if (armInterface.closeGripperPDOCmd() != 1)
+      throw std::runtime_error("Close gripper command failed.");
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
+
+void ManipulatorDriver::openGripperCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = false;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    requireControlEnabled();
+    if (armInterface.openGripperPDOCmd() != 1)
+      throw std::runtime_error("Open gripper command failed.");
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
+
+void ManipulatorDriver::setGripperOpenPositionCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = false;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    armInterface.m_gripperOpenPosition = ManipulatorState.ActualPosition[6];
+    armInterface.computeGripperState();
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
+
+void ManipulatorDriver::setGripperClosePositionCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  const bool previousReadWait = canReadWaitFlag;
+  canReadWaitFlag = false;
+  response->success = true;
+  response->message = "API call completed; hardware completion is not verified.";
+  try {
+    armInterface.m_gripperClosePosition = ManipulatorState.ActualPosition[6];
+    armInterface.computeGripperState();
+  } catch (const std::exception &error) {
+    response->success = false;
+    response->message = error.what();
+  } catch (...) {
+    response->success = false;
+    response->message = "Unknown error while calling the manipulator API.";
+  }
+  canReadWaitFlag = previousReadWait;
+}
+
+void ManipulatorDriver::clearEmergenciesCallback(
+    const std::shared_ptr<Trigger::Request>,
+    std::shared_ptr<Trigger::Response> response)
+{
+  for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i)
+    ManipulatorState.Emergency[i] = {};
+  response->success = true;
+  response->message = "Cached emergency codes cleared; drive faults were not reset.";
+}
+
+void ManipulatorDriver::setDebugCallback(
+    const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+    std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+{
+  m_debugEnabled = request->data;
+  response->success = true;
+  response->message = m_debugEnabled ? "Debug output enabled." : "Debug output disabled.";
 }
 
 void ManipulatorDriver::requireControlEnabled() const
@@ -261,7 +395,7 @@ void ManipulatorDriver::initManipulator()
     throw std::runtime_error("InitManipulator: Can driver init failed.");
   }
   
-  if (armInterface.IPPosModeInit() != 1)
+  if (armInterface.initIPPosMode() != 1)
     throw std::runtime_error("IP mode initialization failed.");
   RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 IP POS Mode, Joint 7 Torque Mode");
 
@@ -278,7 +412,7 @@ void ManipulatorDriver::initManipulator()
       break;
   }
 
-  if (armInterface.IPPosModeEnable() != 1)
+  if (armInterface.enableIPPosMode() != 1)
     throw std::runtime_error("IP mode enable failed.");
   m_controlEnabled = true;
   RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 enabled");
@@ -323,7 +457,8 @@ void ManipulatorDriver::handleROS2Loop()
   joint_state.position[6] = armInterface.m_gripperAngleOffset +
       armInterface.m_gripperJointDirection * armInterface.m_gripperAngle;
   joint_state.position[7] = -1 * joint_state.position[6];
-
+  joint_state.effort[6] = armInterface.m_gripperCurrent;
+  joint_state.effort[7] = -1 * joint_state.effort[6];
   m_jointStatePublisher->publish(joint_state);
   checkCmdTimeout(1);
 }
@@ -339,9 +474,11 @@ void ManipulatorDriver::handleDebugLoop()
               armPlanner.m_posCmd[3], armPlanner.m_posCmd[4], armPlanner.m_posCmd[5]);
   // 打印每个电机的状态字
   for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i) {
-    RCLCPP_INFO(this->get_logger(), "Motor %u status=0x%04X",
+    const std::string statusBits = std::bitset<16>(ManipulatorState.ActualStatus[i]).to_string();
+    RCLCPP_INFO(this->get_logger(), "Motor %u status=0b%.4s %.4s %.4s %.4s",
                 static_cast<unsigned>(i + 1),
-                static_cast<unsigned>(ManipulatorState.ActualStatus[i]));
+                statusBits.c_str(), statusBits.c_str() + 4,
+                statusBits.c_str() + 8, statusBits.c_str() + 12);
   }
 }
 
@@ -371,13 +508,13 @@ void ManipulatorDriver::gripperCmdCallback(const std_msgs::msg::Bool::SharedPtr 
   }
 
   if (msg->data) {
-    if (armInterface.IPOpenGripper() != 1) {
+    if (armInterface.openGripperPDOCmd() != 1) {
       RCLCPP_ERROR(this->get_logger(), "Open gripper command failed.");
       return;
     }
     RCLCPP_INFO(this->get_logger(), "Open Gripper with current %d (per thousand rated torque)", GripperTorque);
   } else {
-    if (armInterface.IPCloseGripper() != 1) {
+    if (armInterface.closeGripperPDOCmd() != 1) {
       RCLCPP_ERROR(this->get_logger(), "Close gripper command failed.");
       return;
     }
@@ -397,8 +534,11 @@ void ManipulatorDriver::jointVelCmdCallback(
   armPlanner.setDesiredVelocity(cmd);
 
   m_lastVelCmdTime = std::chrono::steady_clock::now();
-  RCLCPP_INFO(this->get_logger(), "joint Velocity Cmd cmd1 %f cmd2 %f cmd3 %f cmd4 %f cmd5 %f cmd6 %f",
+  if(m_debugEnabled){
+    RCLCPP_INFO(this->get_logger(), "joint Velocity Cmd cmd1 %.4f cmd2 %.4f cmd3 %.4f cmd4 %.4f cmd5 %.4f cmd6 %.4f",
               cmd[0], cmd[1], cmd[2], cmd[3], cmd[4], cmd[5]);
+  }
+  
 }
 
 void ManipulatorDriver::jointPosCmdCallback(

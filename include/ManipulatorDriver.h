@@ -23,8 +23,24 @@ public:
 private:
   using Trigger = std_srvs::srv::Trigger;
 
-  rclcpp::Service<Trigger>::SharedPtr createApiService(
-      const std::string &name, std::function<void()> action, bool wait_for_sdo);
+  void motionInitCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void motionEnableCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void motionDisableCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void closeGripperCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void openGripperCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void setGripperOpenPositionCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void setGripperClosePositionCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void clearEmergenciesCallback(const std::shared_ptr<Trigger::Request> request,
+      std::shared_ptr<Trigger::Response> response);
+  void setDebugCallback(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+      std::shared_ptr<std_srvs::srv::SetBool::Response> response);
   void requireControlEnabled() const;
   void resetPlanner();
   void initManipulator();

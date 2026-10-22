@@ -36,6 +36,7 @@ src/kinematicsController.cpp
 canopenAPP/GlobalVariables.cpp
 canopenAPP/ProfPosition.cpp
 canopenAPP/ProfTorque.cpp
+canopenAPP/ProfVelocity.cpp
 canopenAPP/InterPosition.cpp
 canopenAPP/canopen.cpp
 canopenAPP/nmt.cpp

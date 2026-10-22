@@ -18,14 +18,14 @@ CAN 参数为 `can_id`（默认 0）和 `can_baud_rate`（默认 500），名称
 ```/初始化candriver
   candriver.initialize();
   //初始化机械臂内所有驱动器，1-6初始化为IP POS模式，7初始化为力矩模式
-  armInterface.IPPosModeInit();
+  armInterface.initIPPosMode();
 
   //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
   //初始化模式标志位，初始化指令，让指令与当前位置相同
   armPlanner.AutoVelModeInit();
 
   //机械臂1-6关节使能
-  armInterface.IPPosModeEnable();
+  armInterface.enableIPPosMode();
   // std::cout << armPlanner.m_posCmd[0]<< armPlanner.m_posCmd[1]<< armPlanner.m_posCmd[2]<< 
   //         armPlanner.m_posCmd[3]<< armPlanner.m_posCmd[4]<< armPlanner.m_posCmd[5] << std::endl;
   canReadWaitFlag = false; 
@@ -47,11 +47,11 @@ CAN 参数为 `can_id`（默认 0）和 `can_baud_rate`（默认 500），名称
 
 | 服务 | 封装接口 |
 | --- | --- |
-| `/manipulator_driver/ip_pos_mode_init` | `IPPosModeInit()` |
-| `/manipulator_driver/ip_pos_mode_enable` | `IPPosModeEnable()` |
-| `/manipulator_driver/ip_pos_mode_disable` | `IPPosModeDisable()` |
-| `/manipulator_driver/close_gripper` | `IPCloseGripper()` |
-| `/manipulator_driver/open_gripper` | `IPOpenGripper()` |
+| `/manipulator_driver/motion_init` | `initIPPosMode()` |
+| `/manipulator_driver/motion_enable` | `enableIPPosMode()` |
+| `/manipulator_driver/motion_disable` | `disableIPPosMode()` |
+| `/manipulator_driver/close_gripper` | `closeGripperPDOCmd()` |
+| `/manipulator_driver/open_gripper` | `openGripperPDOCmd()` |
 | `/manipulator_driver/set_gripper_open_position` | 将当前夹钳编码器反馈保存为全开标定位置 |
 | `/manipulator_driver/set_gripper_close_position` | 将当前夹钳编码器反馈保存为全闭标定位置 |
 | `/manipulator_driver/clear_emergencies` | 清除节点缓存的 emergency 错误字段 |
@@ -60,9 +60,9 @@ CAN 参数为 `can_id`（默认 0）和 `can_baud_rate`（默认 500），名称
 节点启动时仍自动初始化并使能。需要重新初始化时，依次调用：
 
 ```bash
-ros2 service call /manipulator_driver/ip_pos_mode_disable std_srvs/srv/Trigger "{}"
-ros2 service call /manipulator_driver/ip_pos_mode_init std_srvs/srv/Trigger "{}"
-ros2 service call /manipulator_driver/ip_pos_mode_enable std_srvs/srv/Trigger "{}"
+ros2 service call /manipulator_driver/motion_disable std_srvs/srv/Trigger "{}"
+ros2 service call /manipulator_driver/motion_init std_srvs/srv/Trigger "{}"
+ros2 service call /manipulator_driver/motion_enable std_srvs/srv/Trigger "{}"
 ```
 
 清除已缓存的 emergency 错误码（不会向驱动器发送故障复位；若故障仍在，后续报文会再次记录）：

@@ -92,7 +92,7 @@ void ManipulatorPlanner::run(){
 void ManipulatorPlanner::setDesiredVelocity(double* dq){
     //对速度进行限制
     for(unsigned char i=0;i<_manipulator.m_jointnum;i++){
-        if(fabs(dq[i]>m_maxVelocity[i])){
+        if(fabs(dq[i])>m_maxVelocity[i]){
             m_velDes[i] = fabs(dq[i])/dq[i] * m_maxVelocity[i];
         }else{
              m_velDes[i] = dq[i];
