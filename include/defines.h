@@ -10,10 +10,10 @@
 #define CANChannel 0
 #define GripperTorque 300
 
-// 1 vel mode
-// 2 pos mode
-// 4 PV 模式
-#define MANIPULATOR_MODE_DEFINE 4
+// 2 vel mode
+// 3 pos mode
+// 5 PV 模式
+#define MANIPULATOR_MODE_DEFINE 3
 
 //kinematics paramaters of each joint dq = kp*delta_q
 #define KinKp1 1.0

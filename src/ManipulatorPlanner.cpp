@@ -13,7 +13,6 @@ void ManipulatorPlanner::IPVelModeCmdInit(){
     }
 }
 void ManipulatorPlanner::IPVelModeInit(){
-    m_Mode = ManipulatorMode_IP_Vel;
     IPVelModeCmdInit();
 }
 void ManipulatorPlanner::IPVelModeRun(){
@@ -27,11 +26,8 @@ void ManipulatorPlanner::IPVelModeRun(){
 }
 
 void ManipulatorPlanner::IPPosModeInit(){
-    delete m_posController;
-    m_posController = nullptr;
-    m_Mode = ManipulatorMode_IP_Pos;
     double kp[6] = {KinKp1,KinKp2,KinKp3,KinKp4,KinKp5,KinKp6};
-    m_posController = new PosKinController(kp,m_acc,_manipulator.m_jointposition,_manipulator.m_controlfrequency,m_maxVelocity,
+    m_posController = PosKinController(kp,m_acc,_manipulator.m_jointposition,_manipulator.m_controlfrequency,m_maxVelocity,
                                             _manipulator.m_jointUpperLimits,_manipulator.m_jointLowerLimits);
     for(unsigned char i=0;i<ManipulatorState.NumOfJoint;i++){
         m_posCmd[i] = _manipulator.m_jointposition[i];
@@ -39,13 +35,12 @@ void ManipulatorPlanner::IPPosModeInit(){
     }
 } 
 void ManipulatorPlanner::IPPosModeRun(){
-    m_posController->updateJointPositionCmd(m_posModePositionDes,_manipulator.m_jointposition,m_posCmd);
+    m_posController.updateJointPositionCmd(m_posModePositionDes,_manipulator.m_jointposition,m_posCmd);
     _manipulator.sendPosCmd(m_posCmd);
     return;
 } 
 
 void ManipulatorPlanner::P2PModeInit(){
-    m_Mode = ManipulatorMode_IP_P2P;
 } 
 void ManipulatorPlanner::P2PModeRun(){
 
@@ -55,28 +50,48 @@ void ManipulatorPlanner::PVModeRun(){
     _manipulator.sendPVCmdPDO(m_velDes);
 }
 void ManipulatorPlanner::PVModeInit(){
-    m_Mode = ManipulatorMode_PV;
     for (double &velocity : m_velDes) {
         velocity = 0.0;
     }
 }
+void ManipulatorPlanner::init(){
+    switch (MANIPULATOR_MODE_DEFINE)
+    {
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
+        IPVelModeInit();
+        return;
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
+        IPPosModeInit();
+        return;
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_P2P:
+        /* code */
+        P2PModeInit();
+        break;
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
+        PVModeInit();
+        return;
+    default:
+      break;
+    }
+
+}
         
 void ManipulatorPlanner::run(){
-    switch (m_Mode)
+    switch (MANIPULATOR_MODE_DEFINE)
     {
-    case ManipulatorMode_IP_Vel:
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
         /* code */
         IPVelModeRun();
         break;
-    case ManipulatorMode_IP_Pos:
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
         /* code */
         IPPosModeRun();
         break;
-    case ManipulatorMode_IP_P2P:
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_P2P:
         /* code */
         P2PModeRun();
         break;
-    case ManipulatorMode_PV:
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
         /* code */
         PVModeRun();
         break;

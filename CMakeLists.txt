@@ -59,6 +59,16 @@ install(PROGRAMS scripts/gripper_help.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME gripper_help
 )
+
+install(PROGRAMS scripts/joint6_velocity.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME joint6_velocity
+)
+
+install(PROGRAMS scripts/joint_zero_position.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME joint_zero_position
+)
   
 install(
   DIRECTORY launch 

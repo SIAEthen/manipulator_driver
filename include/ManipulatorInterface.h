@@ -37,6 +37,11 @@ class ManipulatorInterface
 
         }
 
+
+        // 读取所有电机（含夹爪）的额定电流，单位 mA。
+        // CAN 通道需已打开，建议在初始化阶段调用；全部成功返回 1，否则返回 0。
+        // 失败保留原缓存；内部临时开启 SDO 等待，返回前恢复。
+        int     readMotorRatedCurrent();
         // 读取全局 ManipulatorState 并换算关节状态，对速度、电流和加速度滤波，不接收 CAN 消息。
         void    updateState();
         // 将关节位置 q（rad）换算为编码器计数，通过 CANopen RPDO 下发，不发送 SYNC。
@@ -111,18 +116,18 @@ class ManipulatorInterface
         uint8_t m_jointnum;
         uint8_t m_controlfrequency;
 
-        //hnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnzhnz
+        bool initMotionFlag = false;
+        bool enableMotionFlag = false;
     private:
-        
         double m_previousVelocity[6] = {0.0,0.0,0.0,0.0,0.0,0.0};   //初始化为0
     public:
         double m_estimatedTorque[6] = {0};
         double m_measuredTorque[6] = {0};
         double m_estimatedDisturbanceTorque[6] = {0};
         double m_forceTorqueBsedFrame[6] = {0};
-        double m_driverGain[6] = {0.083*160, 0.083*160, 0.093*100,0.093*100, 0.093*100, 0.8091};
+        double m_driverGain[7] = {0.083*160, 0.083*160, 0.093*100,0.093*100, 0.093*100, 0.8091, 29.0};
 //        Motor1 6000 Motor2 14140 Motor3 8490 Motor 4 8490 Motor5 8490 Motor6 5660
-        double m_ratedCurrent[6] = {6000.0,14140.0,8490.0,8490.0,8490.0,5660.0}; //mA
+        double m_ratedCurrent[7] = {6000.0,14140.0,8490.0,8490.0,8490.0,5660.0, 2000.0}; //mA
         bool m_runningFlag = false; //如果发布了运动指令，则该值为真，否则该值为假。
         bool m_collisionFlag = false;
 };

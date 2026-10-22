@@ -131,20 +131,19 @@ ManipulatorDriver::ManipulatorDriver()
       "~/joint_pos_rad_cmd", qos_cmd,
       std::bind(&ManipulatorDriver::jointPosCmdCallback, this, std::placeholders::_1));
 
-  debugSummary();
+  printInitSummary();
 }
 
 
 ManipulatorDriver::~ManipulatorDriver()
 {
-  if (!m_controlEnabled) {
-    RCLCPP_INFO(this->get_logger(), "Manipulator already disabled; skipping disableIPPosMode.");
+  if (!armInterface.enableMotionFlag) {
+    RCLCPP_INFO(this->get_logger(), "Manipulator already disabled; skipping disableMotionMode.");
   } else {
-    m_controlEnabled = false;
     RCLCPP_INFO(this->get_logger(), "Disabling manipulator before CAN shutdown...");
     const bool previousReadWait = canReadWaitFlag;
     canReadWaitFlag = true;
-    const bool disableSucceeded = armInterface.disableIPPosMode() == 1;
+    const bool disableSucceeded = armInterface.disableMotionMode() == 1;
     canReadWaitFlag = previousReadWait;
     if (disableSucceeded)
       RCLCPP_INFO(this->get_logger(), "Manipulator disable call succeeded.");
@@ -165,12 +164,12 @@ void ManipulatorDriver::motionInitCallback(
   response->success = true;
   response->message = "API call completed; hardware completion is not verified.";
   try {
-    if (m_controlEnabled)
+    if (armInterface.enableMotionFlag)
       throw std::runtime_error("Disable the manipulator before initialization.");
-    if (ipModeFlags & IP_Flag_Init)
+    if (armInterface.initMotionFlag)
       throw std::runtime_error("Init is already finished!");
-    if (armInterface.initIPPosMode() != 1 || !(ipModeFlags & IP_Flag_Init))
-      throw std::runtime_error("IP mode initialization failed.");
+    if (armInterface.initMotionMode() != 1 || !armInterface.initMotionFlag)
+      throw std::runtime_error("Motion mode initialization failed.");
     resetPlanner();
   } catch (const std::exception &error) {
     response->success = false;
@@ -191,18 +190,19 @@ void ManipulatorDriver::motionEnableCallback(
   response->success = true;
   response->message = "API call completed; hardware completion is not verified.";
   try {
-    if (m_controlEnabled) {
+    if (armInterface.enableMotionFlag) {
       canReadWaitFlag = previousReadWait;
       return;
     }
-    if (!(ipModeFlags & IP_Flag_Init))
+    if (!armInterface.initMotionFlag)
       throw std::runtime_error("Call motion_init before enabling.");
     armInterface.updateState();
     resetPlanner();
-    armInterface.sendPosCmd(armPlanner.m_posCmd);
-    if (armInterface.enableIPPosMode() != 1)
-      throw std::runtime_error("IP mode enable failed.");
-    m_controlEnabled = true;
+    if (MANIPULATOR_MODE_DEFINE == ManipulatorModeTypeDef::ManipulatorMode_IP_Vel ||
+        MANIPULATOR_MODE_DEFINE == ManipulatorModeTypeDef::ManipulatorMode_IP_Pos)
+      armInterface.sendPosCmd(armPlanner.m_posCmd);
+    if (armInterface.enableMotionMode() != 1)
+      throw std::runtime_error("Motion mode enable failed.");
   } catch (const std::exception &error) {
     response->success = false;
     response->message = error.what();
@@ -222,14 +222,13 @@ void ManipulatorDriver::motionDisableCallback(
   response->success = true;
   response->message = "API call completed; hardware completion is not verified.";
   try {
-    if (!m_controlEnabled) {
+    if (!armInterface.enableMotionFlag) {
       canReadWaitFlag = previousReadWait;
       return;
     }
-    m_controlEnabled = false;
     m_velCmdPublishingFlag = false;
-    if (armInterface.disableIPPosMode() != 1)
-      throw std::runtime_error("IP mode disable failed.");
+    if (armInterface.disableMotionMode() != 1)
+      throw std::runtime_error("Motion mode disable failed.");
   } catch (const std::exception &error) {
     response->success = false;
     response->message = error.what();
@@ -347,7 +346,7 @@ void ManipulatorDriver::setDebugCallback(
 
 void ManipulatorDriver::requireControlEnabled() const
 {
-  if (!m_controlEnabled)
+  if (!armInterface.enableMotionFlag)
     throw std::runtime_error("Control is not enabled!");
 }
 
@@ -359,23 +358,12 @@ void ManipulatorDriver::resetPlanner()
   for (unsigned char i = 0; i < ManipulatorState.NumOfJoint; ++i)
     armPlanner.m_velCmd[i] = 0.0;
 
-  switch (MANIPULATOR_MODE_DEFINE) {
-    case 1:
-      armPlanner.IPVelModeInit();
-      break;
-    case 2:
-      armPlanner.IPPosModeInit();
-      break;
-    case 4:
-      armPlanner.PVModeInit();
-      break;
-    default:
-      throw std::runtime_error("Unsupported manipulator mode.");
-  }
+  armPlanner.init();
 }
 
 void ManipulatorDriver::initManipulator()
 {
+  
   canReadWaitFlag = true; //马上要进行SDO的通信了，因此我要用readWait，等待接收驱动器的回复信息
   RCLCPP_INFO(this->get_logger(), "canReadWaitFlag: Set to true for SDO");
   candriver.setParam(m_canId, m_canBaudRate);
@@ -384,31 +372,34 @@ void ManipulatorDriver::initManipulator()
   }else{
     throw std::runtime_error("InitManipulator: Can driver init failed.");
   }
+  RCLCPP_INFO(this->get_logger(), "InitManipulator: Try to read 7 motors ratedCurrent");
+  if(armInterface.readMotorRatedCurrent()!=1)
+    throw std::runtime_error("readMotorRatedCurrent failed.");
+  for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i) {
+    RCLCPP_INFO(this->get_logger(), "Motor %u ratedCurrent=%u mA",
+                static_cast<unsigned>(i + 1),
+                static_cast<unsigned>(armInterface.m_ratedCurrent[i]));
+  }
   
-  if (armInterface.initIPPosMode() != 1)
-    throw std::runtime_error("IP mode initialization failed.");
-  RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 IP POS Mode, Joint 7 Torque Mode");
-
+  RCLCPP_INFO(this->get_logger(), "InitManipulator: Try to init motion mode");
   switch (MANIPULATOR_MODE_DEFINE) {
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
-      armPlanner.IPVelModeInit();
-      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in IP Vel Mode");
-      break;
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint IP Vel Mode, gripper PT"); break;
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
-      armPlanner.IPPosModeInit();
-      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in IP Pos Mode");
-      break;
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint IP Pos Mode, gripper PT"); break;
     case ManipulatorModeTypeDef::ManipulatorMode_PV:
-      armPlanner.PVModeInit();
-      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in PV Mode");
-      break;
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint PV Mode, gripper PT"); break;
     default:
-      break;
+      RCLCPP_ERROR(this->get_logger(), "MANIPULATOR_MODE_DEFINE not defined"); break;
   }
+  if (armInterface.initMotionMode() != 1)
+    throw std::runtime_error("Motion mode initialization failed.");
+  armPlanner.init();
+  RCLCPP_INFO(this->get_logger(), "Motion Mode init success!");
 
-  if (armInterface.enableIPPosMode() != 1)
-    throw std::runtime_error("IP mode enable failed.");
-  m_controlEnabled = true;
+  RCLCPP_INFO(this->get_logger(), "Try to enable motion...");
+  if (armInterface.enableMotionMode() != 1)
+    throw std::runtime_error("Motion mode enable failed.");
   RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 enabled");
   canReadWaitFlag = false;
   RCLCPP_INFO(this->get_logger(), "canReadWaitFlag: Set to false for PDO");
@@ -417,11 +408,11 @@ void ManipulatorDriver::initManipulator()
 
 void ManipulatorDriver::controlLoopCallback()
 {
-  if (m_controlEnabled || (ipModeFlags & IP_Flag_Init)){
+  if (armInterface.enableMotionFlag || armInterface.initMotionFlag){
     armInterface.updateState();
     armInterface.sendFdbRequest();
   }
-  if(m_controlEnabled){
+  if(armInterface.enableMotionFlag){
     armPlanner.run();
   }
   return;
@@ -496,7 +487,7 @@ void ManipulatorDriver::logEmergencies() const
 
 void ManipulatorDriver::gripperCmdCallback(const std_msgs::msg::Bool::SharedPtr msg) const
 {
-  if (!m_controlEnabled) {
+  if (!armInterface.enableMotionFlag) {
     RCLCPP_WARN(this->get_logger(), "Gripper command ignored: manipulator is disabled.");
     return;
   }
@@ -560,7 +551,7 @@ void ManipulatorDriver::checkCmdTimeout(double timeout_sec)
   }
 }
 
-void ManipulatorDriver::debugSummary() const
+void ManipulatorDriver::printInitSummary() const
 {
   RCLCPP_INFO(this->get_logger(), "Manipulator driver initialized and enabled: %s",
               this->get_fully_qualified_name());
@@ -570,17 +561,17 @@ void ManipulatorDriver::debugSummary() const
   const char *commandPath = "no command path configured";
   const char *commandTopic = "none";
   switch (MANIPULATOR_MODE_DEFINE) {
-    case 1:
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
       planningMode = "IP velocity planning";
       commandPath = "rad/s -> acceleration limiting -> position integration -> IP position PDO";
       commandTopic = m_jointVelCmdSub->get_topic_name();
       break;
-    case 2:
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
       planningMode = "IP position planning";
       commandPath = "rad -> position planning -> IP position PDO";
       commandTopic = m_jointPosCmdSub->get_topic_name();
       break;
-    case 4:
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
       planningMode = "PV velocity control";
       commandPath = "rad/s -> velocity limiting -> PV target velocity PDO; drive handles profile acceleration/deceleration";
       commandTopic = m_jointVelCmdSub->get_topic_name();

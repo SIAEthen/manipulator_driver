@@ -48,7 +48,7 @@ private:
   void handleCanLoopCallback();
   void handleROS2Loop();
   void handleDebugLoop();
-  void debugSummary() const;
+  void printInitSummary() const;
   void logEmergencies() const;
   void gripperCmdCallback(const std_msgs::msg::Bool::SharedPtr msg) const;
   void jointVelCmdCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg);
@@ -75,7 +75,6 @@ private:
   rclcpp::Service<Trigger>::SharedPtr m_clearEmergenciesService;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr m_debugService;
 
-  bool m_controlEnabled = false;
   bool m_debugEnabled = false;
   std::chrono::steady_clock::time_point m_lastVelCmdTime;
   bool m_velCmdPublishingFlag = false;

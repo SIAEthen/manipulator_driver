@@ -35,19 +35,13 @@ void ManipulatorInterface::updateState()
 {
     for(uint8_t i=0;i<m_jointnum;i++){
         m_jointposition[i] = (ManipulatorState.ActualPosition[i]-m_jointoffset[i])*PENCODER2RAD*m_jointDirection[i];
-        if(i==5){
-            // 腕部关节使用更强的低通滤波。
-            m_jointvelocity[i] = 0.99*m_jointvelocity[i] + 0.01* (ManipulatorState.ActualVelocity[i])*VENCODER2RADS*m_jointDirection[i];
-        }else{
-            // 其余关节：保留 80% 的旧速度，加入 20% 的当前反馈。
-            m_jointvelocity[i] = 0.8*m_jointvelocity[i] + 0.2* (ManipulatorState.ActualVelocity[i])*VENCODER2RADS*m_jointDirection[i];
-        }
+        m_jointvelocity[i] = ManipulatorState.ActualVelocity[i]*VENCODER2RADS*m_jointDirection[i];
         if(std::abs(m_jointvelocity[i]) < 1e-5){
             m_jointvelocity[i] = 0.0;
         }
 
         // 驱动器电流反馈以额定电流的千分比表示，换算为 mA 后进行低通滤波。
-        m_jointcurrent[i]  = 0.9*m_jointcurrent[i] + 0.1* ManipulatorState.ActualCurrent[i]*m_jointDirection[i]/1000.0 * m_ratedCurrent[i];
+        m_jointcurrent[i]  = ManipulatorState.ActualCurrent[i]*m_jointDirection[i]/1000.0 * m_ratedCurrent[i];
         if(std::abs(m_jointcurrent[i]) < 1e-5){
             m_jointcurrent[i] = 0.0;
         }
@@ -88,7 +82,7 @@ void ManipulatorInterface::computeGripperState()
                             - m_gripperClosePosition) / encoderRange;
     m_gripperAngle = (opening < 0.0 ? 0.0 : (opening > 1.0 ? 1.0 : opening))
                    * m_gripperOpenAngle;
-    m_gripperCurrent = ManipulatorState.ActualCurrent[6];
+    m_gripperCurrent = ManipulatorState.ActualCurrent[6]/1000.0 * m_ratedCurrent[6];
     return;
 }
 
@@ -159,44 +153,88 @@ void ManipulatorInterface::convertDriverFdb2JointFdb(int *posFdb, int *velFdb, i
 }
 
 
+int ManipulatorInterface::readMotorRatedCurrent()
+{
+    _m_driver.flushCANBuffer();
+
+    uint32_t values[7] = {};
+
+    const bool previousReadWait = canReadWaitFlag;
+    canReadWaitFlag = true;
+    for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i) {
+        if (CAN_SDO_PT_Motor_Rated_Current_Value(
+                &_m_driver, ManipulatorState.NodeID[i], &values[i]) != 1) {
+            canReadWaitFlag = previousReadWait;
+            return 0;
+        }
+    }
+    
+    canReadWaitFlag = previousReadWait;
+
+    for (uint8_t i = 0; i < ManipulatorState.NumOfMotor; ++i) {
+        m_ratedCurrent[i] = values[i];
+    }
+    return 1;
+}
+
 int ManipulatorInterface::initMotionMode(){
+    initMotionFlag = false;
+    enableMotionFlag = false;
+    int result = 0;
     switch (MANIPULATOR_MODE_DEFINE)
     {
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
-        return initIPPosMode();
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
-        return initIPPosMode();
+        result = initIPPosMode();
+        break;
     case ManipulatorModeTypeDef::ManipulatorMode_PV:
-        return initPVMode();
+        result = initPVMode();
+        break;
     default:
       break;
     }
+    initMotionFlag = (result == 1);
+    return result;
 }
 int ManipulatorInterface::enableMotionMode(){
+    enableMotionFlag = false;
+    int result = 0;
     switch (MANIPULATOR_MODE_DEFINE)
     {
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
-        return enableIPPosMode();
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
-        return enableIPPosMode();
+        result = enableIPPosMode();
+        break;
     case ManipulatorModeTypeDef::ManipulatorMode_PV:
-        return enablePVMode();
+        result = enablePVMode();
+        break;
     default:
       break;
     }
+    enableMotionFlag = (result == 1);
+    return result;
 }
 int ManipulatorInterface::disableMotionMode(){
+    // 先停止上层控制下发，即使底层去使能失败也不再继续规划运动。
+    enableMotionFlag = false;
+    int result = 0;
     switch (MANIPULATOR_MODE_DEFINE)
     {
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
-        return disableIPPosMode();
     case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
-        return disableIPPosMode();
+        result = disableIPPosMode();
+        break;
     case ManipulatorModeTypeDef::ManipulatorMode_PV:
-        return disablePVMode();
+        result = disablePVMode();
+        break;
     default:
       break;
     }
+    if (result == 1) {
+        initMotionFlag = false;
+        enableMotionFlag = false;
+    }
+    return result;
 }
 
 
@@ -221,7 +259,7 @@ int ManipulatorInterface::initIPPosMode(){
         m_jointVelocityCmd[i] = ManipulatorState.ActualVelocity[i];
     }
 
-    // 额定电流目前使用头文件中的 m_ratedCurrent 配置，此处尚未实现从驱动器读取。
+    // 额定电流可通过 readMotorRatedCurrent() 单独读取，此处保留当前配置。
     return 1;
 }
 
@@ -240,11 +278,11 @@ int ManipulatorInterface::disableIPPosMode(){
 // 不使能运动，不修改驱动器现有的轮廓加减速参数。
 int ManipulatorInterface::initPVMode()
 {
+    
     // 取消pdo，这时候可以使用SDO
     CAN_NMT_Switch_State(&_m_driver, 0x00, NMT_CMD_PRE_OP);
     sleep(1);
-    if(_m_driver.flushCANBuffer())
-        return 0;
+    _m_driver.flushCANBuffer();
     
     const bool previousReadWait = canReadWaitFlag;
     canReadWaitFlag = true;
@@ -282,8 +320,7 @@ int ManipulatorInterface::initPVMode()
 int ManipulatorInterface::enablePVMode()
 {
     usleep(500000);
-    if(_m_driver.flushCANBuffer())
-        return 0;
+    _m_driver.flushCANBuffer(); //很容易不OK
     const bool previousReadWait = canReadWaitFlag;
     canReadWaitFlag = true;
     for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i) {
@@ -302,8 +339,7 @@ int ManipulatorInterface::enablePVMode()
 int ManipulatorInterface::disablePVMode()
 {
     usleep(500000);
-    if(_m_driver.flushCANBuffer())
-        return 0;
+    _m_driver.flushCANBuffer();
     const bool previousReadWait = canReadWaitFlag;
     canReadWaitFlag = true;
     int success = 1;
@@ -313,6 +349,7 @@ int ManipulatorInterface::disablePVMode()
         else
             m_jointVelocityCmd[i] = 0;
     }
+    if (PT_Disable(&_m_driver, ManipulatorState.NodeID[6]) != 1) success = 0;
     canReadWaitFlag = previousReadWait;
     return success;
 }

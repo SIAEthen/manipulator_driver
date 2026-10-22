@@ -11,10 +11,7 @@ class ManipulatorPlanner
 {   friend class ManipulatorDriver;
     public:
         ManipulatorPlanner(ManipulatorInterface& manipulator);
-        ~ManipulatorPlanner() {
-            if(m_Mode==ManipulatorMode_IP_Pos)
-            delete m_posController;
-            } ;
+        ~ManipulatorPlanner() = default;
         
         void IPVelModeCmdInit();
         void IPVelModeInit(); 
@@ -26,6 +23,7 @@ class ManipulatorPlanner
         void PVModeRun();
         void PVModeInit(); 
         void run(); 
+        void init();
         
         void setDesiredVelocity(double* dq);
         void getCmdVelocity();
@@ -33,8 +31,7 @@ class ManipulatorPlanner
 
     private:
         ManipulatorInterface& _manipulator;
-        ManipulatorModeTypeDef m_Mode = ManipulatorMode_Disable;
-        PosKinController *m_posController = nullptr;
+        PosKinController m_posController;
         double m_maxVelocity[6] = {MaxVel1,MaxVel2,MaxVel3,MaxVel4,MaxVel5,MaxVel6};
         double m_acc[6] = {KinAcc1,KinAcc2,KinAcc3,KinAcc4,KinAcc5,KinAcc6};
     
