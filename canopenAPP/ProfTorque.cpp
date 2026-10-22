@@ -95,3 +95,52 @@ int PT_Disable(canDriver *driver, uint16_t NodeID)
 
 
 
+int PT_Config_PDO(canDriver *driver, uint16_t NodeID)
+{
+    if (driver == nullptr || NodeID < 1 || NodeID > 127) return 0;
+
+    // 调用方先将节点切换到 NMT Pre-Operational，配置完成后再切回 Operational。
+    // TPDO1：状态字（16 bit）+ 实际电流（16 bit），与 IP 模式相同。
+    if (CAN_PDO_Set_ComParam(driver, PDO_T1, NodeID, PDO_FUNCTION_DISABLE, PDO_Tx_1SYNC, 0, 0) != 1) return 0;
+    ODOBJTypeDef tpdo1Objects[2] = {OBJ_Status_Word, OBJ_Current_Actual_Value};
+    if (CAN_PDO_Set_MapParam(driver, PDO_T1, NodeID, 2, tpdo1Objects) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_T1, NodeID, PDO_FUNCTION_SET_TRANS_TYPE, PDO_Tx_1SYNC, 0, 0) != 1) return 0;
+    // TODO：TPDO1 inhibit time / event timer，如有需要在此配置。
+    if (CAN_PDO_Set_ComParam(driver, PDO_T1, NodeID, PDO_FUNCTION_ENABLE, PDO_Tx_1SYNC, 0, 0) != 1) return 0;
+
+    // TPDO2：实际位置（32 bit）+ 实际速度（32 bit），与现有反馈解析格式相同。
+    if (CAN_PDO_Set_ComParam(driver, PDO_T2, NodeID, PDO_FUNCTION_DISABLE, PDO_Tx_1SYNC, 0, 0) != 1) return 0;
+    ODOBJTypeDef tpdo2Objects[2] = {OBJ_Actual_Position_User, OBJ_Actual_Velocity_User};
+    if (CAN_PDO_Set_MapParam(driver, PDO_T2, NodeID, 2, tpdo2Objects) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_T2, NodeID, PDO_FUNCTION_SET_TRANS_TYPE, PDO_Tx_1SYNC, 0, 0) != 1) return 0;
+    // 沿用 IP 夹爪配置：禁止时间 6000，单位 100 us，即 600 ms。
+    if (CAN_PDO_Set_ComParam(driver, PDO_T2, NodeID, PDO_FUNCTION_SET_INHIBIT_TIME, PDO_Tx_1SYNC, 6000, 0) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_T2, NodeID, PDO_FUNCTION_ENABLE, PDO_Tx_1SYNC, 0, 0) != 1) return 0;
+
+    // RPDO1：控制字（16 bit），与 IP 模式相同。
+    if (CAN_PDO_Set_ComParam(driver, PDO_R1, NodeID, PDO_FUNCTION_DISABLE, PDO_Rx_1_SYNC, 0, 0) != 1) return 0;
+    ODOBJTypeDef rpdo1Objects[1] = {OBJ_Control_Word};
+    if (CAN_PDO_Set_MapParam(driver, PDO_R1, NodeID, 1, rpdo1Objects) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_R1, NodeID, PDO_FUNCTION_SET_TRANS_TYPE, PDO_Rx_1_SYNC, 0, 0) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_R1, NodeID, PDO_FUNCTION_ENABLE, PDO_Rx_1_SYNC, 0, 0) != 1) return 0;
+
+    // RPDO2：PT 目标力矩（0x6071，16 bit），与 IP 夹爪电机相同。
+    if (CAN_PDO_Set_ComParam(driver, PDO_R2, NodeID, PDO_FUNCTION_DISABLE, PDO_Rx_1_SYNC, 0, 0) != 1) return 0;
+    ODOBJTypeDef rpdo2Objects[1] = {OBJ_PT_Target_Torque};
+    if (CAN_PDO_Set_MapParam(driver, PDO_R2, NodeID, 1, rpdo2Objects) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_R2, NodeID, PDO_FUNCTION_SET_TRANS_TYPE, PDO_Rx_1_SYNC, 0, 0) != 1) return 0;
+    if (CAN_PDO_Set_ComParam(driver, PDO_R2, NodeID, PDO_FUNCTION_ENABLE, PDO_Rx_1_SYNC, 0, 0) != 1) return 0;
+    return 1;
+}
+
+// tarVal 为 0x6071 的原始目标力矩（额定力矩千分比），不是 mA，不做单位换算。
+int PT_Set_Torque_Current_PDO(canDriver *driver, uint16_t NodeID, int16_t tarVal)
+{
+    if (driver == nullptr || NodeID < 1 || NodeID > 127) return 0;
+    const uint16_t value = static_cast<uint16_t>(tarVal);
+    uint8_t sendData[2] = {
+        static_cast<uint8_t>(value & 0xFF),
+        static_cast<uint8_t>((value >> 8) & 0xFF)
+    };
+    return CAN_PDO_Send_Data(driver, PDO_R2, NodeID, 2, sendData) == 1 ? 1 : 0;
+}

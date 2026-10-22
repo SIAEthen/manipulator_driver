@@ -215,6 +215,10 @@ typedef enum {
 #define OD_PV_VELOCITY_DEMAND_VALUE		(uint16_t)(0x606B)	//  int32 RO RxMap def=0
 /* 实际的速度值 以用户定义的单位形式 * */
 #define OD_PV_VELOCITY_ACTUAL_VALUE		(uint16_t)(0x606C)	//  int32 RO RxMap def no
+#define OD_PV_VELOCITY_WINDOW		(uint16_t)(0x606D)	// uint16 RW No PDO; 速度到达窗口，速度单位，默认 100
+#define OD_PV_VELOCITY_WINDOW_TIME		(uint16_t)(0x606E)	// uint16 RW No PDO; 速度到达窗口持续时间，ms，默认 20
+#define OD_PV_VELOCITY_THRESHOLD		(uint16_t)(0x606F)	// uint16 RW No PDO; 速度为零判定阈值，速度单位，默认 100
+#define OD_PV_VELOCITY_THRESHOLD_TIME		(uint16_t)(0x6070)	// uint16 RW No PDO; 速度为零判定持续时间，ms，默认 20
 #define OD_PV_TARGET_VELOCITY			(uint16_t)(0x60FF)	//  int32 RW RxMap
 
 /* PT Profile-Torque 轮廓扭矩模式相关的设置对象 ******************************* */
@@ -480,6 +484,10 @@ extern const ODOBJTypeDef OBJ_PV_Target_Velocity	;
 extern const ODOBJTypeDef OBJ_PV_Profile_Acc		;
 extern const ODOBJTypeDef OBJ_PV_Profile_Dec		;
 extern const ODOBJTypeDef OBJ_PV_QUICK_STOP_Dec	;
+extern const ODOBJTypeDef OBJ_PV_Velocity_Window;
+extern const ODOBJTypeDef OBJ_PV_Velocity_Window_Time;
+extern const ODOBJTypeDef OBJ_PV_Velocity_Threshold;
+extern const ODOBJTypeDef OBJ_PV_Velocity_Threshold_Time;
 
 /* Profile Torque 运动模式相关字典对象定义 */
 extern const ODOBJTypeDef OBJ_PT_Target_Torque				;

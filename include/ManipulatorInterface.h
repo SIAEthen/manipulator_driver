@@ -10,6 +10,16 @@
 #include "GlobalVariables.h"
 #include "ProfVelocity.h"
 
+
+typedef enum{
+    ManipulatorMode_Disable = 1,
+    ManipulatorMode_IP_Vel,
+    ManipulatorMode_IP_Pos,
+    ManipulatorMode_IP_P2P,
+    ManipulatorMode_PV
+}ManipulatorModeTypeDef;
+
+
 double DEG2RAD(double deg);
 double RAD2DEG(double rad);
 int RAD2ENCODER(double rad);
@@ -31,12 +41,15 @@ class ManipulatorInterface
         void    updateState();
         // 将关节位置 q（rad）换算为编码器计数，通过 CANopen RPDO 下发，不发送 SYNC。
         void    sendPosCmd(const double *q);
+        void    sendPVCmdPDO(const double *dq_radps);
         // 发送 SYNC，并将已有 TPDO1和TPDO2数据 缓存解析到全局 ManipulatorState，不等待新反馈。
         void    sendFdbRequest();
         // 高频轮询 CAN 接收并更新 TPDO 缓存，后续由 sendFdbRequest() 解析反馈。
         void    handleCANFdb();
 
-
+        int     initMotionMode();
+        int     enableMotionMode();
+        int     disableMotionMode();
 
         void    convertJointCmd2DriverCmd(double *position, double *velocity, int *posCmd, int *velCmd);
         void    convertJointCmd2DriverCmd(double *q, int *posCmd);
@@ -46,7 +59,11 @@ class ManipulatorInterface
         int     enableIPPosMode();
         int     disableIPPosMode();
 
+        // 以下 PV 接口仅操作关节电机，不改变夹钳、PDO 映射或 ROS 控制模式。
+        // CAN 通道需已打开，调用前停止原控制循环并退出 IP 模式。
+        // 内部临时开启 SDO 等待，返回前恢复；全部成功返回 1，否则返回 0。
         int     initPVMode();
+        // 先初始化 PV 并按驱动器单位配置 PV_Set_Profile，再调用使能。
         int     enablePVMode();
         int     disablePVMode();
 

@@ -29,4 +29,18 @@ int PT_Disable(canDriver *driver, uint16_t NodeID);
 /* 通过SDO获取驱动器设置的Rated Torque */
 int PT_RatedTorque(canDriver *driver, uint16_t NodeID, uint16_t *resVal);
 
+/* 参考 IP 夹爪配置 TPDO1=状态字+电流、TPDO2=位置+速度、RPDO1=控制字、RPDO2=目标力矩。
+ * 调用前需进入 NMT Pre-Operational 并开启 canReadWaitFlag；本函数不切换 NMT 或使能电机。
+ * 均为同步传输，TPDO2 禁止时间沿用 6000（100 us 单位，即 600 ms）。
+ * 返回 1 表示全部配置成功，0 表示失败。
+ */
+int PT_Config_PDO(canDriver *driver, uint16_t NodeID);
+
+/* RPDO2 下发 2 字节小端目标力矩，tarVal 为 0x6071 原始千分比值，不是 mA。
+ * 不执行 PT_Set_Torque_Current 的额定电流换算，不读取 SDO。
+ * 需先配置 PDO、进入 NMT Operational；下次 SYNC 生效，本函数不发送 SYNC。
+ * 返回 1 表示发送成功，0 表示失败，不代表机械动作完成。
+ */
+int PT_Set_Torque_Current_PDO(canDriver *driver, uint16_t NodeID, int16_t tarVal);
+
 #endif /* APP_INC_PROFTORQUE_H_ */

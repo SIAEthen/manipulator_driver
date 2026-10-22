@@ -12,7 +12,8 @@
 
 // 1 vel mode
 // 2 pos mode
-#define ManipulatorPlannerMode 2
+// 4 PV 模式
+#define MANIPULATOR_MODE_DEFINE 4
 
 //kinematics paramaters of each joint dq = kp*delta_q
 #define KinKp1 1.0

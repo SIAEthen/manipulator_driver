@@ -83,6 +83,10 @@ const ODOBJTypeDef OBJ_PV_Target_Velocity	= {OD_PV_TARGET_VELOCITY,   0x00, OBJ_
 const ODOBJTypeDef OBJ_PV_Profile_Acc		= {OD_PV_PROFILED_ACC, 	    0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_4};	// 到达轮廓速度过程加速度
 const ODOBJTypeDef OBJ_PV_Profile_Dec		= {OD_PV_PROFILED_DEC, 	    0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_4};	// 从轮廓速度减速过程减速度
 const ODOBJTypeDef OBJ_PV_QUICK_STOP_Dec	= {OD_PV_QUICK_STOP_DEC,    0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_4};	// 快速停止-减速到0过程减速度
+const ODOBJTypeDef OBJ_PV_Velocity_Window	= {OD_PV_VELOCITY_WINDOW,   0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_2}; // 速度到达窗口，速度单位，默认 100
+const ODOBJTypeDef OBJ_PV_Velocity_Window_Time	= {OD_PV_VELOCITY_WINDOW_TIME, 0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_2}; // 速度到达窗口持续时间，ms，默认 20
+const ODOBJTypeDef OBJ_PV_Velocity_Threshold	= {OD_PV_VELOCITY_THRESHOLD, 0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_2}; // 速度为零判定阈值，速度单位，默认 100
+const ODOBJTypeDef OBJ_PV_Velocity_Threshold_Time	= {OD_PV_VELOCITY_THRESHOLD_TIME, 0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_2}; // 速度为零判定持续时间，ms，默认 20
 
 /* Profile Torque 运动模式相关字典对象定义 */
 const ODOBJTypeDef OBJ_PT_Target_Torque			= {OD_PT_TARGET_TORQUE, 0x00, OBJ_READ_WRITE, OBJ_DATA_NUM_2};	// 目标扭矩-电流 需要做转换 不是直接设置电流值

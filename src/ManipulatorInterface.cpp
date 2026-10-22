@@ -108,6 +108,15 @@ void    ManipulatorInterface::sendPosCmd(const double *q){
     IP_Mode_SendCommandPos(&_m_driver,posCmd);
 }
 
+void    ManipulatorInterface::sendPVCmdPDO(const double *dq_radps){
+    for (uint8_t i = 0; i < m_jointnum; ++i) {
+            const int32_t velocityCmd = static_cast<int32_t>(dq_radps[i] * 1000.0 * m_jointDirection[i]);
+            if (PV_Set_Target_Velocity_PDO(&_m_driver, ManipulatorState.NodeID[i], velocityCmd) != 1)
+                return;
+            m_jointVelocityCmd[i] = velocityCmd;
+    }
+}
+
 // 发送 SYNC，触发同步指令执行及反馈；将已有 TPDO 缓存解析到全局 ManipulatorState。
 // 此调用不等待本次 SYNC 的新反馈，实际接收由 handleCANFdb() 完成。
 void    ManipulatorInterface::sendFdbRequest(){
@@ -149,6 +158,48 @@ void ManipulatorInterface::convertDriverFdb2JointFdb(int *posFdb, int *velFdb, i
     }
 }
 
+
+int ManipulatorInterface::initMotionMode(){
+    switch (MANIPULATOR_MODE_DEFINE)
+    {
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
+        return initIPPosMode();
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
+        return initIPPosMode();
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
+        return initPVMode();
+    default:
+      break;
+    }
+}
+int ManipulatorInterface::enableMotionMode(){
+    switch (MANIPULATOR_MODE_DEFINE)
+    {
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
+        return enableIPPosMode();
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
+        return enableIPPosMode();
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
+        return enablePVMode();
+    default:
+      break;
+    }
+}
+int ManipulatorInterface::disableMotionMode(){
+    switch (MANIPULATOR_MODE_DEFINE)
+    {
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
+        return disableIPPosMode();
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
+        return disableIPPosMode();
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
+        return disablePVMode();
+    default:
+      break;
+    }
+}
+
+
 /**
  * 配置 1～6 号关节为 IP 插补位置模式（8 ms 周期），7 号夹爪电机为力矩模式。
  * CAN 通道需已初始化；完成后仍需初始化规划器，再调用 enableIPPosMode() 使能关节。
@@ -184,16 +235,100 @@ int ManipulatorInterface::enableIPPosMode(){
 int ManipulatorInterface::disableIPPosMode(){
     return IP_Mode_Disable(&_m_driver) == 1 ? 1 : 0;
 }
+
+// 初始化关节 PV 模式，并设置默认速度监测参数（10、20 ms、10、20 ms）。
+// 不使能运动，不修改驱动器现有的轮廓加减速参数。
+int ManipulatorInterface::initPVMode()
+{
+    // 取消pdo，这时候可以使用SDO
+    CAN_NMT_Switch_State(&_m_driver, 0x00, NMT_CMD_PRE_OP);
+    sleep(1);
+    if(_m_driver.flushCANBuffer())
+        return 0;
+    
+    const bool previousReadWait = canReadWaitFlag;
+    canReadWaitFlag = true;
+    for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i) {
+        const uint16_t nodeID = ManipulatorState.NodeID[i];
+        if(PV_Config_PDO(&_m_driver, nodeID)!=1){
+            canReadWaitFlag = previousReadWait;
+            return 0;
+        }
+        if (PV_Init(&_m_driver, nodeID) != 1 ) {
+            canReadWaitFlag = previousReadWait;
+            return 0;
+        }
+        
+        m_jointVelocityCmd[i] = 0;
+    }
+    //夹钳
+    const uint16_t nodeID = ManipulatorState.NodeID[6];
+    if(PT_Config_PDO(&_m_driver, nodeID)!=1){
+            canReadWaitFlag = previousReadWait;
+            return 0;
+        }
+    if (PT_Torque_Init(&_m_driver, nodeID) != 1) {
+            canReadWaitFlag = previousReadWait;
+            return 0;
+        }
+    //NMT start, enable PDO and SDO
+    CAN_NMT_Switch_State(&_m_driver, 0x00, NMT_CMD_START);
+    sleep(1);
+    canReadWaitFlag = previousReadWait;
+    return 1;
+}
+
+// 清零速度后逐个使能；任一失败时，尝试对所有关节去使能。
+int ManipulatorInterface::enablePVMode()
+{
+    usleep(500000);
+    if(_m_driver.flushCANBuffer())
+        return 0;
+    const bool previousReadWait = canReadWaitFlag;
+    canReadWaitFlag = true;
+    for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i) {
+        if (PV_Enable(&_m_driver, ManipulatorState.NodeID[i]) != 1) {
+            disablePVMode();
+            canReadWaitFlag = previousReadWait;
+            return 0;
+        }
+        m_jointVelocityCmd[i] = 0;
+    }
+    canReadWaitFlag = previousReadWait;
+    return 1;
+}
+
+// 即使某个关节去使能失败，也继续处理其余关节；不改变夹钳状态。
+int ManipulatorInterface::disablePVMode()
+{
+    usleep(500000);
+    if(_m_driver.flushCANBuffer())
+        return 0;
+    const bool previousReadWait = canReadWaitFlag;
+    canReadWaitFlag = true;
+    int success = 1;
+    for (uint8_t i = 0; i < ManipulatorState.NumOfJoint; ++i) {
+        if (PV_Disable(&_m_driver, ManipulatorState.NodeID[i]) != 1)
+            success = 0;
+        else
+            m_jointVelocityCmd[i] = 0;
+    }
+    canReadWaitFlag = previousReadWait;
+    return success;
+}
+
 // 按配置的夹爪方向，通过 RPDO 发送目标力矩以闭合夹爪。
 // GripperTorque 使用驱动器力矩模式的目标值单位，并非直接以 N·m 表示。
 int ManipulatorInterface::closeGripperPDOCmd()
 {
-    return PDO_Set_TargetTorque(&_m_driver,int16_t(m_gripperTorqueDirection * GripperTorque));
+    return PT_Set_Torque_Current_PDO(&_m_driver,ManipulatorState.NodeID[6],int16_t(m_gripperTorqueDirection * GripperTorque));
+    // return PDO_Set_TargetTorque(&_m_driver,int16_t(m_gripperTorqueDirection * GripperTorque));
 }
 // 按闭合的相反方向打开夹爪；torque 为额定电流的千分比。
 int ManipulatorInterface::openGripperPDOCmd()
 {
-    return PDO_Set_TargetTorque(&_m_driver,int16_t(-m_gripperTorqueDirection * GripperTorque));
+    return PT_Set_Torque_Current_PDO(&_m_driver,ManipulatorState.NodeID[6],int16_t(-m_gripperTorqueDirection * GripperTorque));
+    // return PDO_Set_TargetTorque(&_m_driver,int16_t(-m_gripperTorqueDirection * GripperTorque));
 }
 
 // 以下为全局辅助函数，不属于 ManipulatorInterface 成员。

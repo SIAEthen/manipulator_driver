@@ -22,7 +22,7 @@ CAN 参数为 `can_id`（默认 0）和 `can_baud_rate`（默认 500），名称
 
   //机械臂发布指令只能通过armPlanner发布，初始化规划的模式，才能在循环中循环调用run().
   //初始化模式标志位，初始化指令，让指令与当前位置相同
-  armPlanner.AutoVelModeInit();
+  armPlanner.IPVelModeInit();
 
   //机械臂1-6关节使能
   armInterface.enableIPPosMode();

@@ -1,4 +1,5 @@
 #include "ManipulatorPlanner.h"
+#include <stdexcept>
 
 ManipulatorPlanner::ManipulatorPlanner(ManipulatorInterface& manipulator) :
 _manipulator(manipulator)
@@ -6,43 +7,29 @@ _manipulator(manipulator)
     
     
 }
-void ManipulatorPlanner::AutoVelModeCmdInit(){
+void ManipulatorPlanner::IPVelModeCmdInit(){
     for(unsigned char i=0;i<_manipulator.m_jointnum;i++){
         m_posCmd[i] = _manipulator.m_jointposition[i];
     }
 }
-void ManipulatorPlanner::AutoVelModeInit(){
-    m_Mode = ManipulatorMode_AutoVel;
-    AutoVelModeCmdInit();
+void ManipulatorPlanner::IPVelModeInit(){
+    m_Mode = ManipulatorMode_IP_Vel;
+    IPVelModeCmdInit();
 }
-void ManipulatorPlanner::AutoVelModeRun(){
-    //根据期望速度，和当前指令，以及加速度，给出一个缓和的速度
+void ManipulatorPlanner::IPVelModeRun(){
+    // 按加速度约束平滑速度，再按 dt = 1 / 控制频率积分为位置（rad）。
     getCmdVelocity();
-    //速度积分得到位置
-    for(unsigned char i=0;i<_manipulator.m_jointnum;i++){
-        m_posCmd[i] = m_posCmd[i] + m_velCmd[i]/_manipulator.m_controlfrequency;
+    const double dt = 1.0 / _manipulator.m_controlfrequency;
+    for (uint8_t i = 0; i < _manipulator.m_jointnum; ++i) {
+        m_posCmd[i] += m_velCmd[i] * dt;
     }
-    //根据位置限制，对位置进行限位
-    for(unsigned char i=0;i<_manipulator.m_jointnum;i++){
-        //第六关节连续旋转，因此将其映射到-pi ~pi
-        if(i==5){
-            if(m_posCmd[i]<_manipulator.m_jointLowerLimits[i]) m_posCmd[i] += 2 * PI;
-            if(m_posCmd[i]>_manipulator.m_jointUpperLimits[i]) m_posCmd[i] -= 2 * PI;
-        }else{
-            // 1-5关节不连续，因此就在自己限位内就OK
-            if(m_posCmd[i]<_manipulator.m_jointLowerLimits[i]) m_posCmd[i] = _manipulator.m_jointLowerLimits[i];
-            if(m_posCmd[i]>_manipulator.m_jointUpperLimits[i]) m_posCmd[i] = _manipulator.m_jointUpperLimits[i];
-        }
-    }
-    
-    _manipulator.sendPosCmd(m_posCmd); 
-    return;
-} 
+    _manipulator.sendPosCmd(m_posCmd);
+}
 
-void ManipulatorPlanner::AutoPosModeInit(){
+void ManipulatorPlanner::IPPosModeInit(){
     delete m_posController;
     m_posController = nullptr;
-    m_Mode = ManipulatorMode_AutoPos;
+    m_Mode = ManipulatorMode_IP_Pos;
     double kp[6] = {KinKp1,KinKp2,KinKp3,KinKp4,KinKp5,KinKp6};
     m_posController = new PosKinController(kp,m_acc,_manipulator.m_jointposition,_manipulator.m_controlfrequency,m_maxVelocity,
                                             _manipulator.m_jointUpperLimits,_manipulator.m_jointLowerLimits);
@@ -51,38 +38,50 @@ void ManipulatorPlanner::AutoPosModeInit(){
         m_posModePositionDes[i] = _manipulator.m_jointposition[i];
     }
 } 
-void ManipulatorPlanner::AutoPosModeRun(){
+void ManipulatorPlanner::IPPosModeRun(){
     m_posController->updateJointPositionCmd(m_posModePositionDes,_manipulator.m_jointposition,m_posCmd);
-    _manipulator.sendPosCmd(m_posCmd); 
+    _manipulator.sendPosCmd(m_posCmd);
     return;
 } 
 
 void ManipulatorPlanner::P2PModeInit(){
-    m_Mode = ManipulatorMode_P2P;
+    m_Mode = ManipulatorMode_IP_P2P;
 } 
 void ManipulatorPlanner::P2PModeRun(){
 
+}
+
+void ManipulatorPlanner::PVModeRun(){
+    _manipulator.sendPVCmdPDO(m_velDes);
+}
+void ManipulatorPlanner::PVModeInit(){
+    m_Mode = ManipulatorMode_PV;
+    for (double &velocity : m_velDes) {
+        velocity = 0.0;
+    }
 }
         
 void ManipulatorPlanner::run(){
     switch (m_Mode)
     {
-    case ManipulatorMode_AutoVel:
+    case ManipulatorMode_IP_Vel:
         /* code */
-        AutoVelModeRun();
+        IPVelModeRun();
         break;
-    case ManipulatorMode_AutoPos:
+    case ManipulatorMode_IP_Pos:
         /* code */
-        AutoPosModeRun();
+        IPPosModeRun();
         break;
-    case ManipulatorMode_P2P:
+    case ManipulatorMode_IP_P2P:
         /* code */
         P2PModeRun();
         break;
-    case ManipulatorMode_Disable:
+    case ManipulatorMode_PV:
         /* code */
-        
+        PVModeRun();
         break;
+    case ManipulatorMode_Disable:
+        throw std::runtime_error("Manipulator planner is disabled; initialize a planning mode before calling run().");
     default:
         break;
     }
@@ -108,7 +107,7 @@ void ManipulatorPlanner::setDesiredPosition(double* q){
     }
 }
 
-//根据期望速度与当前命令的速度，结合设定的加速度值，给出当前指令应该有的速度
+//根据期望速度与当前速度命令，结合设定的加速度值，给出当前指令应该有的速度
 void ManipulatorPlanner::getCmdVelocity(){
     //对速度进行限制
     for(unsigned char i=0;i<_manipulator.m_jointnum;i++){

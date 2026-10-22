@@ -5,29 +5,26 @@
 #include "JointPlanner.h"
 #include "kinematicsController.h"
 
-typedef enum{
-    ManipulatorMode_Disable = 1,
-    ManipulatorMode_AutoVel,
-    ManipulatorMode_AutoPos,
-    ManipulatorMode_P2P
-}ManipulatorModeTypeDef;
+
 
 class ManipulatorPlanner
 {   friend class ManipulatorDriver;
     public:
         ManipulatorPlanner(ManipulatorInterface& manipulator);
         ~ManipulatorPlanner() {
-            if(m_Mode==ManipulatorMode_AutoPos)
+            if(m_Mode==ManipulatorMode_IP_Pos)
             delete m_posController;
             } ;
         
-        void AutoVelModeCmdInit();
-        void AutoVelModeInit(); 
-        void AutoVelModeRun(); 
-        void AutoPosModeInit(); 
-        void AutoPosModeRun(); 
+        void IPVelModeCmdInit();
+        void IPVelModeInit(); 
+        void IPVelModeRun(); 
+        void IPPosModeInit(); 
+        void IPPosModeRun(); 
         void P2PModeInit(); 
         void P2PModeRun(); 
+        void PVModeRun();
+        void PVModeInit(); 
         void run(); 
         
         void setDesiredVelocity(double* dq);

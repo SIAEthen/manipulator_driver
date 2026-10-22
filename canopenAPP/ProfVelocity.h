@@ -27,6 +27,18 @@ int PV_Set_Profile(canDriver *driver, uint16_t NodeID,
                    uint32_t acceleration, uint32_t deceleration,
                    uint32_t quickStopDeceleration);
 
+/* 配置速度到达和零速判定参数，各参数范围均为 0～65535（允许为 0）。
+ * velocityWindow：0x606D，速度到达窗口，单位为驱动器配置的速度单位。
+ * velocityWindowTimeMs：0x606E，速度到达窗口持续时间，单位 ms。
+ * velocityThreshold：0x606F，零速判定阈值，单位为驱动器配置的速度单位。
+ * velocityThresholdTimeMs：0x6070，零速判定持续时间，单位 ms。
+ * 默认窗口和阈值为 10，两个持续时间均为 20 ms。
+ * 不进行 rad/s 换算；任一步写入失败即返回 0，已写入的参数不回滚。
+ */
+int PV_Set_Velocity_Monitoring(canDriver *driver, uint16_t NodeID,
+                              uint16_t velocityWindow = 10, uint16_t velocityWindowTimeMs = 20,
+                              uint16_t velocityThreshold = 10, uint16_t velocityThresholdTimeMs = 20);
+
 // 设置有符号目标速度（0x60FF），单位由驱动器配置决定，不是直接传 rad/s。
 // 不改变使能或 Halt 状态。
 int PV_Set_Target_Velocity(canDriver *driver, uint16_t NodeID, int32_t tarVal);
@@ -40,5 +52,8 @@ int PV_Halt(canDriver *driver, uint16_t NodeID);
 // 清零目标速度并执行 Shutdown；不等待机械停车，不复位故障。
 int PV_Disable(canDriver *driver, uint16_t NodeID);
 
+int PV_Config_PDO(canDriver *driver, uint16_t NodeID);
+
+int PV_Set_Target_Velocity_PDO(canDriver *driver, uint16_t NodeID, int32_t tarVal);
 
 #endif /* APP_INC_PROFVELOCITY_H_ */

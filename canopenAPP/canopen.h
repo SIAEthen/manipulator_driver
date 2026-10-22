@@ -102,7 +102,7 @@ typedef struct {
 typedef enum {
 	/* 和驱动器状态机相关的控制位取值 bit3~0,7 其他位不影响状态机的状态 */
 	CW_CLEAR						=	(uint16_t)(0x00),
-	CW_SHUT_DOWN					=	(uint16_t)(0x06),
+	CW_SHUT_DOWN					=	(uint16_t)(0x06), //402 P36 P43 对应状态变换 2 6 8, 切换到ready to swith on
 	CW_SWITCH_ON					=	(uint16_t)(0x07),
 	CW_EN_OP						=	(uint16_t)(0x0F),
 	CW_DIS_VOL						=	(uint16_t)(0x00),
@@ -288,6 +288,15 @@ int CAN_SDO_PV_Profile_Acceleration(canDriver *driver, uint16_t NodeID, uint32_t
 int CAN_SDO_PV_Profile_Deceleration(canDriver *driver, uint16_t NodeID, uint32_t decVal, uint32_t *resVal);
 /* SDO方式写驱动器 PV 模式下，设置快速停止减速度 */
 int CAN_SDO_PV_Quick_Stop_Deceleration(canDriver *driver, uint16_t NodeID, uint32_t decVal, uint32_t *resVal);
+
+/* SDO方式写驱动器 PV 模式下，设置速度到达窗口，单位为驱动器速度单位 */
+int CAN_SDO_PV_Velocity_Window(canDriver *driver, uint16_t NodeID, uint16_t windowVal, uint32_t *resVal);
+/* SDO方式写驱动器 PV 模式下，设置速度到达窗口持续时间，单位 ms */
+int CAN_SDO_PV_Velocity_Window_Time(canDriver *driver, uint16_t NodeID, uint16_t timeVal, uint32_t *resVal);
+/* SDO方式写驱动器 PV 模式下，设置速度为零判定阈值，单位为驱动器速度单位 */
+int CAN_SDO_PV_Velocity_Threshold(canDriver *driver, uint16_t NodeID, uint16_t thresholdVal, uint32_t *resVal);
+/* SDO方式写驱动器 PV 模式下，设置速度为零判定持续时间，单位 ms */
+int CAN_SDO_PV_Velocity_Threshold_Time(canDriver *driver, uint16_t NodeID, uint16_t timeVal, uint32_t *resVal);
 
 /* SDO方式写驱动器 PT 模式下，设置目标扭矩、电流 */
 int CAN_SDO_PT_Target_Torque_Current(canDriver *driver, uint16_t NodeID, int16_t torqueVal, uint32_t *resVal);

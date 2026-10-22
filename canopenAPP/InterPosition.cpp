@@ -205,13 +205,14 @@ static int IP_Send_Position(canDriver *driver, uint8_t NodeId, int32_t posValue)
     return 1;
 }
 
-/* 用RPDO发送夹爪点击的电流数据 */
-static int IP_Send_Torque(canDriver *driver, uint8_t NodeId, int16_t torqueValue)
-{
-    uint8_t txData[8] = {(torqueValue>>0)&0xFF, (torqueValue>>8)&0xFF};
-    if (1 != CAN_PDO_Send_Data(driver, PDO_R2, NodeId, 2, txData))	return 0;
-    return 1;
-}
+// /* 用RPDO发送夹爪点击的电流数据 */
+// 2026-10-22 挪到PT文件下
+// static int IP_Send_Torque(canDriver *driver, uint8_t NodeId, int16_t torqueValue)
+// {
+//     uint8_t txData[8] = {(torqueValue>>0)&0xFF, (torqueValue>>8)&0xFF};
+//     if (1 != CAN_PDO_Send_Data(driver, PDO_R2, NodeId, 2, txData))	return 0;
+//     return 1;
+// }
 
 /* IP 模式初始化函数
  *  映射PDO 设置运动参数 设置IP周期等参数
@@ -774,7 +775,7 @@ void IP_Mode_SendCommandPos(canDriver *driver,int32_t *posCMD)
 
 }
 
-//static类型外部文件不允许调用，所以做了这个接口
-int PDO_Set_TargetTorque(canDriver *driver, int16_t targetTorque){
-    return IP_Send_Torque(driver, ManipulatorState.NodeID[6], targetTorque);
-}
+// //static类型外部文件不允许调用，所以做了这个接口
+// int PDO_Set_TargetTorque(canDriver *driver, int16_t targetTorque){
+//     return IP_Send_Torque(driver, ManipulatorState.NodeID[6], targetTorque);
+// }

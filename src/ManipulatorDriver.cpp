@@ -131,22 +131,9 @@ ManipulatorDriver::ManipulatorDriver()
       "~/joint_pos_rad_cmd", qos_cmd,
       std::bind(&ManipulatorDriver::jointPosCmdCallback, this, std::placeholders::_1));
 
-  RCLCPP_INFO(this->get_logger(), "Manipulator driver initialized and enabled: %s",
-              this->get_fully_qualified_name());
-  RCLCPP_INFO(this->get_logger(), "CAN channel %d, baud rate %d kbit/s; %u arm joints and one torque-controlled gripper.",
-              m_canId, m_canBaudRate, static_cast<unsigned>(ManipulatorState.NumOfJoint));
-  RCLCPP_INFO(this->get_logger(), "Arm control mode: %s; control 125 Hz, CAN receive 500 Hz, joint states 50 Hz.",
-              ManipulatorPlannerMode == 1 ? "velocity" : "position");
-  RCLCPP_INFO(this->get_logger(), "Joint commands: %s (rad), %s (rad/s); active mode selects which command is executed.",
-              m_jointPosCmdSub->get_topic_name(), m_jointVelCmdSub->get_topic_name());
-  RCLCPP_INFO(this->get_logger(), "Gripper command: %s (true=open, false=close); joint feedback: %s.",
-              m_gripperCmdSub->get_topic_name(), m_jointStatePublisher->get_topic_name());
-  RCLCPP_INFO(this->get_logger(), "Services under %s/: motion_init, motion_enable, motion_disable, open_gripper, close_gripper.",
-              this->get_fully_qualified_name());
-  RCLCPP_INFO(this->get_logger(), "Calibration services: set_gripper_open_position, set_gripper_close_position; calibration is stored in memory.");
-  RCLCPP_INFO(this->get_logger(), "Diagnostics: clear_emergencies clears cached errors; set_debug enables command and motor status logs every 5 s (default off).");
-  
+  debugSummary();
 }
+
 
 ManipulatorDriver::~ManipulatorDriver()
 {
@@ -372,12 +359,15 @@ void ManipulatorDriver::resetPlanner()
   for (unsigned char i = 0; i < ManipulatorState.NumOfJoint; ++i)
     armPlanner.m_velCmd[i] = 0.0;
 
-  switch (ManipulatorPlannerMode) {
+  switch (MANIPULATOR_MODE_DEFINE) {
     case 1:
-      armPlanner.AutoVelModeInit();
+      armPlanner.IPVelModeInit();
       break;
     case 2:
-      armPlanner.AutoPosModeInit();
+      armPlanner.IPPosModeInit();
+      break;
+    case 4:
+      armPlanner.PVModeInit();
       break;
     default:
       throw std::runtime_error("Unsupported manipulator mode.");
@@ -399,14 +389,18 @@ void ManipulatorDriver::initManipulator()
     throw std::runtime_error("IP mode initialization failed.");
   RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 IP POS Mode, Joint 7 Torque Mode");
 
-  switch (ManipulatorPlannerMode) {
-    case 1:
-      armPlanner.AutoVelModeInit();
-      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in Vel Mode");
+  switch (MANIPULATOR_MODE_DEFINE) {
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Vel:
+      armPlanner.IPVelModeInit();
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in IP Vel Mode");
       break;
-    case 2:
-      armPlanner.AutoPosModeInit();
-      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in Pos Mode");
+    case ManipulatorModeTypeDef::ManipulatorMode_IP_Pos:
+      armPlanner.IPPosModeInit();
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in IP Pos Mode");
+      break;
+    case ManipulatorModeTypeDef::ManipulatorMode_PV:
+      armPlanner.PVModeInit();
+      RCLCPP_INFO(this->get_logger(), "InitManipulator: Joint 1-6 controlled in PV Mode");
       break;
     default:
       break;
@@ -564,4 +558,45 @@ void ManipulatorDriver::checkCmdTimeout(double timeout_sec)
     double velocity[6] = {0};
     armPlanner.setDesiredVelocity(velocity);
   }
+}
+
+void ManipulatorDriver::debugSummary() const
+{
+  RCLCPP_INFO(this->get_logger(), "Manipulator driver initialized and enabled: %s",
+              this->get_fully_qualified_name());
+  RCLCPP_INFO(this->get_logger(), "CAN channel %d, baud rate %d kbit/s; %u arm joints and one torque-controlled gripper.",
+              m_canId, m_canBaudRate, static_cast<unsigned>(ManipulatorState.NumOfJoint));
+  const char *planningMode = "unsupported";
+  const char *commandPath = "no command path configured";
+  const char *commandTopic = "none";
+  switch (MANIPULATOR_MODE_DEFINE) {
+    case 1:
+      planningMode = "IP velocity planning";
+      commandPath = "rad/s -> acceleration limiting -> position integration -> IP position PDO";
+      commandTopic = m_jointVelCmdSub->get_topic_name();
+      break;
+    case 2:
+      planningMode = "IP position planning";
+      commandPath = "rad -> position planning -> IP position PDO";
+      commandTopic = m_jointPosCmdSub->get_topic_name();
+      break;
+    case 4:
+      planningMode = "PV velocity control";
+      commandPath = "rad/s -> velocity limiting -> PV target velocity PDO; drive handles profile acceleration/deceleration";
+      commandTopic = m_jointVelCmdSub->get_topic_name();
+      break;
+    default:
+      break;
+  }
+  RCLCPP_INFO(this->get_logger(), "Configured planning mode: %s (MANIPULATOR_MODE_DEFINE=%d).",
+              planningMode, MANIPULATOR_MODE_DEFINE);
+  RCLCPP_INFO(this->get_logger(), "Command path: %s.", commandPath);
+  RCLCPP_INFO(this->get_logger(), "Joint command topic for this mode: %s.", commandTopic);
+  RCLCPP_INFO(this->get_logger(), "Timers: control 125 Hz, CAN receive 500 Hz, joint states 50 Hz.");
+  RCLCPP_INFO(this->get_logger(), "Gripper command: %s (true=open, false=close); joint feedback: %s.",
+              m_gripperCmdSub->get_topic_name(), m_jointStatePublisher->get_topic_name());
+  RCLCPP_INFO(this->get_logger(), "Services under %s/: motion_init, motion_enable, motion_disable, open_gripper, close_gripper.",
+              this->get_fully_qualified_name());
+  RCLCPP_INFO(this->get_logger(), "Calibration services: set_gripper_open_position, set_gripper_close_position; calibration is stored in memory.");
+  RCLCPP_INFO(this->get_logger(), "Diagnostics: clear_emergencies clears cached errors; set_debug enables command and motor status logs every 5 s (default off).");
 }

@@ -664,6 +664,118 @@ int CAN_SDO_PV_Quick_Stop_Deceleration(canDriver *driver, uint16_t NodeID, uint3
 }
 
 
+/* SDO方式写驱动器 PV 模式下，设置速度到达窗口，单位为驱动器速度单位 */
+int CAN_SDO_PV_Velocity_Window(canDriver *driver, uint16_t NodeID, uint16_t windowVal, uint32_t *resVal)
+{
+	uint8_t sendData[4] = {static_cast<uint8_t>(windowVal & 0xFF),
+		static_cast<uint8_t>((windowVal >> 8) & 0xFF), 0, 0};
+	if (0 == CAN_SDO_Fast_Write(driver, NodeID, &OBJ_PV_Velocity_Window, sendData))
+		return 0;
+	int res = CAN_Rx_Data_Handle(driver, NodeID);
+	if (0 == res)
+		return 0;
+	else if (4 == res || 3 == res)
+	{
+		*resVal = RxResult; // 存放错误代码
+		return -1;
+	}
+	else if (1 == res && RxResult == 0)
+	{
+		*resVal = RxResult;
+		if (4 == CAN_Rx_Data_Handle(driver, NodeID))
+		{
+			*resVal = RxResult; // 存放错误代码
+			return -1;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+/* SDO方式写驱动器 PV 模式下，设置速度到达窗口持续时间，单位 ms */
+int CAN_SDO_PV_Velocity_Window_Time(canDriver *driver, uint16_t NodeID, uint16_t timeVal, uint32_t *resVal)
+{
+	uint8_t sendData[4] = {static_cast<uint8_t>(timeVal & 0xFF),
+		static_cast<uint8_t>((timeVal >> 8) & 0xFF), 0, 0};
+	if (0 == CAN_SDO_Fast_Write(driver, NodeID, &OBJ_PV_Velocity_Window_Time, sendData))
+		return 0;
+	int res = CAN_Rx_Data_Handle(driver, NodeID);
+	if (0 == res)
+		return 0;
+	else if (4 == res || 3 == res)
+	{
+		*resVal = RxResult; // 存放错误代码
+		return -1;
+	}
+	else if (1 == res && RxResult == 0)
+	{
+		*resVal = RxResult;
+		if (4 == CAN_Rx_Data_Handle(driver, NodeID))
+		{
+			*resVal = RxResult; // 存放错误代码
+			return -1;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+/* SDO方式写驱动器 PV 模式下，设置速度为零判定阈值，单位为驱动器速度单位 */
+int CAN_SDO_PV_Velocity_Threshold(canDriver *driver, uint16_t NodeID, uint16_t thresholdVal, uint32_t *resVal)
+{
+	uint8_t sendData[4] = {static_cast<uint8_t>(thresholdVal & 0xFF),
+		static_cast<uint8_t>((thresholdVal >> 8) & 0xFF), 0, 0};
+	if (0 == CAN_SDO_Fast_Write(driver, NodeID, &OBJ_PV_Velocity_Threshold, sendData))
+		return 0;
+	int res = CAN_Rx_Data_Handle(driver, NodeID);
+	if (0 == res)
+		return 0;
+	else if (4 == res || 3 == res)
+	{
+		*resVal = RxResult; // 存放错误代码
+		return -1;
+	}
+	else if (1 == res && RxResult == 0)
+	{
+		*resVal = RxResult;
+		if (4 == CAN_Rx_Data_Handle(driver, NodeID))
+		{
+			*resVal = RxResult; // 存放错误代码
+			return -1;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+/* SDO方式写驱动器 PV 模式下，设置速度为零判定持续时间，单位 ms */
+int CAN_SDO_PV_Velocity_Threshold_Time(canDriver *driver, uint16_t NodeID, uint16_t timeVal, uint32_t *resVal)
+{
+	uint8_t sendData[4] = {static_cast<uint8_t>(timeVal & 0xFF),
+		static_cast<uint8_t>((timeVal >> 8) & 0xFF), 0, 0};
+	if (0 == CAN_SDO_Fast_Write(driver, NodeID, &OBJ_PV_Velocity_Threshold_Time, sendData))
+		return 0;
+	int res = CAN_Rx_Data_Handle(driver, NodeID);
+	if (0 == res)
+		return 0;
+	else if (4 == res || 3 == res)
+	{
+		*resVal = RxResult; // 存放错误代码
+		return -1;
+	}
+	else if (1 == res && RxResult == 0)
+	{
+		*resVal = RxResult;
+		if (4 == CAN_Rx_Data_Handle(driver, NodeID))
+		{
+			*resVal = RxResult; // 存放错误代码
+			return -1;
+		}
+		return 1;
+	}
+	return 0;
+}
+
 /* SDO方式写驱动器 PT 模式下，设置目标扭矩、电流 */
 int CAN_SDO_PT_Target_Torque_Current(canDriver *driver, uint16_t NodeID, int16_t torqueVal, uint32_t *resVal)
 {

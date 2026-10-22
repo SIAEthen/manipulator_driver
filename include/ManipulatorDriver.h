@@ -48,6 +48,7 @@ private:
   void handleCanLoopCallback();
   void handleROS2Loop();
   void handleDebugLoop();
+  void debugSummary() const;
   void logEmergencies() const;
   void gripperCmdCallback(const std_msgs::msg::Bool::SharedPtr msg) const;
   void jointVelCmdCallback(const std_msgs::msg::Float64MultiArray::SharedPtr msg);
