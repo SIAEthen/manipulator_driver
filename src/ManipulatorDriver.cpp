@@ -52,7 +52,7 @@ ManipulatorDriver::ManipulatorDriver()
 
   this->declare_parameter<double>("robot_gripper_torque_direction", 1.0);
   this->declare_parameter<double>("robot_gripper_joint_direction", 1.0);
-  this->declare_parameter<double>("robot_gripper_angle_offset", 0.0);
+  this->declare_parameter<double>("robot_gripper_angle_offset", -PI/4);
   this->get_parameter("robot_gripper_torque_direction", armInterface.m_gripperTorqueDirection);
   this->get_parameter("robot_gripper_joint_direction", armInterface.m_gripperJointDirection);
   this->get_parameter("robot_gripper_angle_offset", armInterface.m_gripperAngleOffset);
@@ -515,7 +515,7 @@ void ManipulatorDriver::jointVelCmdCallback(
 
   double cmd[6] = {0};
   for (unsigned char i = 0; i < armInterface.m_jointnum; ++i)
-    cmd[i] = msg->data.at(i);
+    cmd[i] = msg->data.at(i)*armInterface.m_jointDirection[i]*m_robotJointDirection[i];
   armPlanner.setDesiredVelocity(cmd);
 
   m_lastVelCmdTime = std::chrono::steady_clock::now();

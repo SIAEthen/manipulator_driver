@@ -109,7 +109,7 @@ class ManipulatorInterface
         double m_gripperAngle = 0;
         double m_gripperCurrent = 0;
 
-        double m_jointDirection[6] = {-1.0,1.0,1.0,1.0,1.0,1.0};
+        double m_jointDirection[6] = {1.0,1.0,1.0,1.0,1.0,1.0};
         int32_t m_jointoffset[6];
         
         canDriver& _m_driver;

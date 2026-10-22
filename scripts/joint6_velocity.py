@@ -16,7 +16,9 @@ class Joint6VelocityPublisher(Node):
         super().__init__('joint6_velocity_publisher')
         self.publisher = self.create_publisher(Float64MultiArray, topic, 10)
         self.command = Float64MultiArray()
-        self.command.data = [0.0, 0.0, 0.0, 0.0, 0.0, velocity]
+        # self.command.data = [-0.02, 0.0, 0.0, 0.0, 0.0, velocity]
+        self.command.data = [0.0, 0.02, 0.02, 0.0, 0.0, velocity]
+        # self.command.data = [0.0, 0.0, 0.0, 0.02, 0.02, velocity]
         self.timer = self.create_timer(1.0 / rate, self.publish_command)
         self.get_logger().info(
             'Publishing joint 6 velocity %.4f rad/s at %.1f Hz to %s'
