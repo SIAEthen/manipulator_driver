@@ -1,0 +1,53 @@
+import math
+
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    launch_description = LaunchDescription()
+
+    left_manipulator_driver = Node(
+        package="manipulator_driver",
+        executable="driver",
+        namespace="left",
+        name="manipulator_driver",
+        parameters=[{
+            'can_id': 1,
+            'robot_joint_offsets': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            'robot_joint_directions': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            'joint_names': [
+                'joint1', 'joint2', 'joint3', 'joint4',
+                'joint5', 'joint6', 'joint_gripper1', 'joint_gripper2'],
+            'robot_gripper_torque_direction': -1.0,
+            'robot_gripper_joint_direction': 1.0,
+            'robot_gripper_angle_offset': -math.pi / 4.0,
+            'can_baud_rate': 500,
+        }],
+        output="screen",
+    )
+
+    right_manipulator_driver = Node(
+        package="manipulator_driver",
+        executable="driver",
+        namespace="right",
+        name="manipulator_driver",
+        parameters=[{
+            'can_id': 0,
+            'robot_joint_offsets': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            'robot_joint_directions': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            'joint_names': [
+                'joint1', 'joint2', 'joint3', 'joint4',
+                'joint5', 'joint6', 'joint_gripper1', 'joint_gripper2'],
+            'robot_gripper_torque_direction': -1.0,
+            'robot_gripper_joint_direction': 1.0,
+            'robot_gripper_angle_offset': -math.pi / 4.0,
+            'can_baud_rate': 500,
+        }],
+        output="screen",
+    )
+
+    launch_description.add_action(left_manipulator_driver)
+    launch_description.add_action(right_manipulator_driver)
+
+    return launch_description
