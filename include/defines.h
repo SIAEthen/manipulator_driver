@@ -28,7 +28,7 @@
  * 1 为 Disable，4 为尚未实现的 IP P2P，不用于当前正常控制。
  * 此项为编译期配置，修改后需重新编译并重启驱动。
  */
-#define MANIPULATOR_MODE_DEFINE 3
+#define MANIPULATOR_MODE_DEFINE 5
 
 //kinematics paramaters of each joint dq = kp*delta_q
 #define KinKp1 1.0
